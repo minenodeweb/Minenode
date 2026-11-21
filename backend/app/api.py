@@ -2047,19 +2047,20 @@ async def public_player_stats(key: str, player_uuid: str):
 
 
 @public_router.get("/api/public/servers/{key}/texture")
-async def public_item_texture(key: str, id: str):
-    """A block/item icon extracted from the server's client JAR, mods or resource pack."""
+async def public_item_texture(key: str, id: str, request: Request):
+    """A block/item icon rendered from the server's client JAR, mods or resource pack."""
     inst = _public_inst(key)
     page = getattr(inst.cfg, "public_page", None) or PublicPageSettings()
     if not page.enabled or not page.player_stats:
         raise HTTPException(403, "Statystyki graczy są wyłączone.")
-    with contextlib.suppress(Exception):
-        await itemicons.prepare(inst)
-    # The first request for a block renders its model with PIL – keep that off the event loop.
-    path = await asyncio.to_thread(itemicons.icon_file, inst, id)
-    if not path:
+    result = await itemicons.get_icon(inst, id)
+    if not result:
         raise HTTPException(404, "Brak tekstury tego przedmiotu")
-    return FileResponse(path, media_type="image/png", headers={"Cache-Control": "public, max-age=86400"})
+    png_bytes, etag = result
+    headers = {"Cache-Control": "public, max-age=86400", "ETag": etag}
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers=headers)
+    return Response(content=png_bytes, media_type="image/png", headers=headers)
 
 
 @public_router.get("/api/public/server-icon/{sid}")
