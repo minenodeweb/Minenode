@@ -2054,7 +2054,7 @@ async def public_server_icon(sid: str):
     return FileResponse(path, media_type="image/png", headers={"Cache-Control": "no-cache"})
 
 
-_PROXY_HEADERS = ("content-type", "content-encoding", "cache-control", "etag", "last-modified", "expires")
+_PROXY_HEADERS = ("content-type", "content-encoding", "cache-control", "etag", "last-modified", "expires", "x-accel-buffering")
 
 
 @public_router.get("/map/{sid}/{path:path}", include_in_schema=False)
@@ -2091,9 +2091,10 @@ async def _proxy_map(inst: ServerInstance, port: int, path: str, request: Reques
     if ".." in path.split("/"):
         raise HTTPException(404)
     url = f"http://127.0.0.1:{port}/{path}"
+    is_sse = path == "live/sse" or path.endswith("/live/sse")
     fwd = {k: v for k, v in request.headers.items()
            if k.lower() in ("accept", "accept-encoding", "if-none-match", "if-modified-since", "range")}
-    client = httpx.AsyncClient(timeout=httpx.Timeout(20.0, connect=3.0))
+    client = httpx.AsyncClient(timeout=httpx.Timeout(20.0, read=90.0 if is_sse else 20.0, connect=3.0))
     try:
         req = client.build_request("GET", url, params=request.query_params, headers=fwd)
         upstream = await client.send(req, stream=True)
@@ -2101,7 +2102,16 @@ async def _proxy_map(inst: ServerInstance, port: int, path: str, request: Reques
         await client.aclose()
         return JSONResponse({"detail": "Mapa jeszcze się uruchamia – spróbuj za chwilę."}, status_code=503,
                             headers={"Cache-Control": "no-store"})
-    headers = {k: v for k, v in upstream.headers.items() if k.lower() in _PROXY_HEADERS}
+    headers = {k: v for k, v in upstream.headers.items()
+               if k.lower() in _PROXY_HEADERS and k.lower() != "cache-control"}
+    upstream_cc = upstream.headers.get("cache-control")
+    if is_sse:
+        headers["Cache-Control"] = "no-store"
+        headers["X-Accel-Buffering"] = "no"
+    elif path.startswith("maps/") or not upstream_cc:
+        headers["Cache-Control"] = "no-cache"
+    else:
+        headers["Cache-Control"] = upstream_cc
     headers["X-Frame-Options"] = "SAMEORIGIN"
 
     async def close():
@@ -2256,11 +2266,23 @@ async def webmap_set(sid: str, body: WebMapBody, _: str = Depends(auth.require_u
         inst.panel_log(f"Mapa {title} {(result or {}).get('version') or ''} gotowa – {squaremap.public_url(inst)}")
     elif before.enabled and not wm.enabled:
         inst.panel_log("Mapa wyłączona.")
-    # Jars change only when the map is switched on/off or replaced; options are re-read on restart.
-    changed = wm.model_dump(exclude={"port"}) != before.model_dump(exclude={"port"}) or bool((result or {}).get("updated"))
+    # Jars change only when the map is switched on/off or replaced; BlueMap reloads options online.
+    options_changed = wm.model_dump(exclude={"port"}) != before.model_dump(exclude={"port"})
+    jar_updated = bool((result or {}).get("updated"))
+    live_reloaded = (
+        wm.enabled and before.enabled and wm.provider == "bluemap" and before.provider == "bluemap"
+        and not jar_updated
+    )
+    if live_reloaded and options_changed:
+        if inst.state == "online":
+            inst.spawn(webmap.apply_online_changes(inst))
+        restart_required = False
+    else:
+        changed = options_changed or jar_updated
+        restart_required = bool(changed and inst.running)
     state = await webmap.state(inst)
-    return {**state, "restart_required": bool(changed and inst.running),
-            "installed_files": (result or {}).get("installed_files", []), "updated": bool((result or {}).get("updated"))}
+    return {**state, "restart_required": restart_required,
+            "installed_files": (result or {}).get("installed_files", []), "updated": jar_updated}
 
 
 class WebMapRenderBody(BaseModel):

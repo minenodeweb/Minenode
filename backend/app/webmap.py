@@ -169,6 +169,7 @@ BLUEMAP = ManagedJar("bluemap", "BlueMap", BLUEMAP_ID, r"^bluemap-\d[\w.\-]*\.ja
                      {"paper": ["paper"], "purpur": ["paper"], "fabric": ["fabric"], "quilt": ["fabric"],
                       "forge": ["forge"], "neoforge": ["neoforge"]}, fallback="plugin")
 BLUEMAP_WEBROOT = "bluemap/web"
+_BLUEMAP_FORCE_UPDATE_MARKER = ".minenode-force-update"
 
 
 def bluemap_dir(inst: "ServerInstance") -> Path:
@@ -185,6 +186,10 @@ def _hocon_set(text: str, key: str, value: str) -> str:
     if pattern.search(text):
         return pattern.sub(line.replace("\\", "\\\\"), text, count=1)
     return text.rstrip("\n") + ("\n" if text.strip() else "") + line + "\n"
+
+
+def _hocon_is_false(text: str, key: str) -> bool:
+    return bool(re.search(rf"^{re.escape(key)}\s*[:=]\s*false\b", text, re.M))
 
 
 def _edit(path: Path, values: dict[str, str], header: str = "") -> bool:
@@ -213,24 +218,46 @@ def bluemap_write_config(inst: "ServerInstance", accept: Optional[bool] = None) 
     d = bluemap_dir(inst)
     wm = inst.cfg.webmap
     maps = sorted((d / "maps").glob("*.conf")) if (d / "maps").is_dir() else []
+    was_accepted = _accepted(d)
     if accept is None:
-        accept = bool(maps) or _accepted(d)
+        accept = bool(maps) or was_accepted
     changed = _edit(d / "core.conf", {
         "accept-download": "true" if accept else "false",
         "render-thread-count": "1",
-    }, header='# MineNode: accept-download is set by the panel when BlueMap is enabled.\ndata: "bluemap"\nmetrics: false\n')
+    }, header=('# MineNode: accept-download is set by the panel when BlueMap is enabled.\n'
+               'data: "bluemap"\nrender-thread-count: 1\nscan-for-mod-resources: true\nmetrics: false\n'))
     changed |= _edit(d / "webserver.conf", {
         "enabled": "true", "webroot": f'"{BLUEMAP_WEBROOT}"', "ip": '"127.0.0.1"', "port": str(wm.port or 8100),
-    })
+    }, header="sse-enabled: true\n")
     changed |= _edit(d / "webapp.conf", {
         "enabled": "true", "webroot": f'"{BLUEMAP_WEBROOT}"',
         "default-to-flat-view": "false" if wm.render_3d else "true",
-    })
-    changed |= _edit(d / "plugin.conf", {"live-player-markers": "true" if wm.show_players else "false"})
+    }, header="update-settings-file: true\nuse-cookies: true\n")
+    changed |= _edit(d / "plugin.conf", {"live-player-markers": "true" if wm.show_players else "false"},
+                     header='hidden-game-modes: [\n  "spectator"\n]\nhide-vanished: true\nhide-invisible: true\nplayer-render-limit: -1\n')
     three = "true" if wm.render_3d else "false"
+    needs_rerender = False
     for m in maps:
-        changed |= _edit(m, {"enable-hires": three, "enable-perspective-view": three,
+        try:
+            old_map = m.read_text(encoding="utf-8")
+        except OSError:
+            old_map = ""
+        if was_accepted and (
+            _hocon_is_false(old_map, "enable-hires")
+            or (wm.render_3d and (_hocon_is_false(old_map, "enable-perspective-view")
+                                  or _hocon_is_false(old_map, "enable-free-flight-view")))
+        ):
+            needs_rerender = True
+        # Keep enable-hires always true so close-up high-detail block tiles update in both 2D and 3D;
+        # disabling perspective & free-flight views in 2D enables BlueMap's lightweight top-only pass.
+        changed |= _edit(m, {"enable-hires": "true", "enable-perspective-view": three,
                              "enable-free-flight-view": three, "enable-flat-view": "true"})
+    if needs_rerender:
+        try:
+            d.mkdir(parents=True, exist_ok=True)
+            (d / _BLUEMAP_FORCE_UPDATE_MARKER).write_text("1", encoding="utf-8")
+        except OSError:
+            pass
     return changed
 
 
@@ -373,6 +400,39 @@ async def disable(inst: "ServerInstance") -> None:
     await _disable_others(inst, None)
 
 
+def _consume_bluemap_force_update(inst: "ServerInstance") -> bool:
+    marker = bluemap_dir(inst) / _BLUEMAP_FORCE_UPDATE_MARKER
+    if not marker.is_file():
+        return False
+    try:
+        marker.unlink()
+    except OSError:
+        pass
+    return True
+
+
+def _start_bluemap_full_render(inst: "ServerInstance") -> None:
+    if inst.state != "online" or not hasattr(inst, "map_render"):
+        return
+    if inst.map_render.running:
+        inst.map_render.cancel()
+    try:
+        inst.map_render.start("full")
+    except ModpackError:
+        pass
+
+
+async def apply_online_changes(inst: "ServerInstance") -> None:
+    """BlueMap: reload config changes on a running server and re-render if hires/3D layers were enabled."""
+    if not inst.running or inst.state != "online" or not inst.cfg.webmap.enabled or provider(inst) != "bluemap":
+        return
+    inst.panel_log("BlueMap: ustawienia mapy zapisane – przeładowuję BlueMap.")
+    await inst.send_command("bluemap reload", echo=False)
+    if _consume_bluemap_force_update(inst):
+        await asyncio.sleep(3)
+        _start_bluemap_full_render(inst)
+
+
 async def on_online(inst: "ServerInstance") -> None:
     """BlueMap: adjust the configs it generated on the first start and accept the download."""
     if not inst.cfg.webmap.enabled or provider(inst) != "bluemap":
@@ -381,9 +441,16 @@ async def on_online(inst: "ServerInstance") -> None:
         await asyncio.sleep(8 if attempt == 0 else 30)
         if not inst.running or provider(inst) != "bluemap":
             return
+        reloaded = False
         if await asyncio.to_thread(bluemap_write_config, inst, True):
             inst.panel_log("BlueMap: ustawienia mapy zapisane – przeładowuję BlueMap.")
             await inst.send_command("bluemap reload", echo=False)
+            reloaded = True
+        if _consume_bluemap_force_update(inst):
+            if reloaded:
+                await asyncio.sleep(3)
+            _start_bluemap_full_render(inst)
+            return
 
 
 async def state(inst: "ServerInstance", refresh: bool = False) -> dict:

@@ -16,11 +16,18 @@ def _inst(tmp_path, engine="paper", mc="1.21.11", **webmap_kw):
     async def send_command(cmd, echo=True):
         sent.append(cmd)
 
+    def spawn(coro):
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(coro)
+        return asyncio.create_task(coro)
+
     inst = SimpleNamespace(
         cfg=SimpleNamespace(type=engine, mc_version=mc, id="srv1", subdomain="survival", name="Survival",
                             webmap=WebMapSettings(enabled=True, **webmap_kw), lod=LodSettings()),
         dir=tmp_path, state="online", running=True, props=lambda: {"level-name": "world"},
-        send_command=send_command, panel_log=logs.append, spawn=lambda coro: asyncio.run(coro))
+        send_command=send_command, panel_log=logs.append, spawn=spawn)
     return inst, sent, logs
 
 
@@ -122,9 +129,10 @@ def test_bluemap_first_start_only_generates_configs_then_accepts(tmp_path):
     core = (d / "core.conf").read_text()
     assert "accept-download: false" in core and "render-thread-count: 1" in core
     web = (d / "webserver.conf").read_text()
-    assert 'ip: "127.0.0.1"' in web and "port: 28102" in web and 'webroot: "bluemap/web"' in web
+    assert 'ip: "127.0.0.1"' in web and "port: 28102" in web and 'webroot: "bluemap/web"' in web and "sse-enabled: true" in web
     assert "default-to-flat-view: true" in (d / "webapp.conf").read_text()
-    assert "live-player-markers: false" in (d / "plugin.conf").read_text()
+    plugin_conf = (d / "plugin.conf").read_text()
+    assert "live-player-markers: false" in plugin_conf and "hidden-game-modes:" in plugin_conf
 
     # BlueMap generated its map files on the first start (3D defaults)
     (d / "maps").mkdir()
@@ -133,13 +141,42 @@ def test_bluemap_first_start_only_generates_configs_then_accepts(tmp_path):
     assert webmap.bluemap_write_config(inst, accept=True) is True
     assert "accept-download: true" in (d / "core.conf").read_text()
     m = (d / "maps" / "world.conf").read_text()
-    assert "enable-hires: false" in m and "enable-perspective-view: false" in m and "enable-flat-view: true" in m
+    assert "enable-hires: true" in m and "enable-perspective-view: false" in m
+    assert "enable-free-flight-view: false" in m and "enable-flat-view: true" in m
+    assert not (d / ".minenode-force-update").exists()
     assert webmap.bluemap_write_config(inst) is False  # nothing to change any more, accepted stays
 
     inst.cfg.webmap.render_3d = True
     assert webmap.bluemap_write_config(inst) is True
-    assert "enable-hires: true" in (d / "maps" / "world.conf").read_text()
+    m = (d / "maps" / "world.conf").read_text()
+    assert "enable-hires: true" in m and "enable-perspective-view: true" in m and "enable-free-flight-view: true" in m
     assert "default-to-flat-view: false" in (d / "webapp.conf").read_text()
+    assert (d / ".minenode-force-update").is_file()
+
+
+def test_bluemap_heals_legacy_hires_false_and_reloads_online(tmp_path):
+    inst, sent, _ = _inst(tmp_path, "paper", provider="bluemap", render_3d=False)
+    inst.map_render = webmap.MapRender(inst)
+    d = tmp_path / "plugins" / "BlueMap"
+    (d / "maps").mkdir(parents=True)
+    (d / "core.conf").write_text("accept-download: true\nrender-thread-count: 1\n", encoding="utf-8")
+    (d / "maps" / "world.conf").write_text(
+        'world: "world"\nenable-hires: false\nenable-perspective-view: false\n'
+        "enable-free-flight-view: false\nenable-flat-view: true\n",
+        encoding="utf-8",
+    )
+
+    assert webmap.bluemap_write_config(inst) is True
+    assert "enable-hires: true" in (d / "maps" / "world.conf").read_text(encoding="utf-8")
+    assert (d / ".minenode-force-update").is_file()
+
+    async def scenario():
+        await webmap.apply_online_changes(inst)
+        await asyncio.sleep(0)
+
+    asyncio.run(scenario())
+    assert not (d / ".minenode-force-update").exists()
+    assert sent == ["bluemap reload", "bluemap force-update world"]
 
 
 def test_bluemap_keeps_user_settings_in_existing_files(tmp_path):
