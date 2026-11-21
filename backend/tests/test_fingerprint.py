@@ -1,13 +1,7 @@
 """Packet framing/parsing tests for the informational client fingerprint."""
-import asyncio
-import ipaddress
-import struct
 import zlib
 
-import pytest
-
 from app.fingerprint import PacketSniffer, parse_client_information, parse_plugin_message
-from app.proxy import PROXY_V2_SIG, ProtocolError, _PrefixedReader, _is_loopback_peer, MinecraftProxy
 
 
 def varint(value: int) -> bytes:
@@ -178,62 +172,3 @@ def test_sniffer_does_not_publish_a_partial_first_chunk(monkeypatch):
     assert len(snapshots) == 1
     assert snapshots[0]["client_info"]["locale"] == "en_us"
     assert snapshots[0]["brand"] == "vanilla"
-
-
-class _Writer:
-    def __init__(self):
-        self.data = bytearray()
-
-    def write(self, data):
-        self.data += data
-
-    async def drain(self):
-        return None
-
-
-def test_proxy_v2_header_is_read_and_only_trusted_from_loopback():
-    async def read(header: bytes, peer=("127.0.0.1", 50000)):
-        reader = asyncio.StreamReader()
-        reader.feed_data(header + b"\x10")
-        reader.feed_eof()
-        return await MinecraftProxy._read_inbound_prefix(MinecraftProxy.__new__(MinecraftProxy), reader, peer)
-
-    source = ("203.0.113.7", 12345)
-    ipv4 = PROXY_V2_SIG + bytes([0x21, 0x11]) + struct.pack("!H", 12) + \
-        bytes([203, 0, 113, 7, 10, 0, 0, 1]) + struct.pack("!HH", 12345, 25565)
-    first, peer, reader = asyncio.run(read(ipv4))
-    assert first == b"\x10" and peer == source
-    assert asyncio.run(reader.readexactly(0)) == b""
-
-    # IPv4-mapped IPv6 source addresses are shown in their plain IPv4 form.
-    payload = (ipaddress.IPv6Address("::ffff:203.0.113.7").packed
-               + ipaddress.IPv6Address("::1").packed
-               + struct.pack("!HH", 12345, 25565))
-    ipv6 = PROXY_V2_SIG + bytes([0x21, 0x21]) + struct.pack("!H", 36) + payload
-    first, peer, _ = asyncio.run(read(ipv6))
-    assert first == b"\x10" and peer == source
-
-    # A handshake can start with 0x0d; the bytes must be replayed, not eaten.
-    handshake = b"\r" + b"abcdefghijk"
-    first, peer, reader = asyncio.run(read(handshake))
-    assert first == b"\r"
-    assert asyncio.run(reader.readexactly(11)) == b"abcdefghijk"
-
-    with pytest.raises(ProtocolError):
-        asyncio.run(read(ipv4, ("198.51.100.9", 50000)))
-    assert _is_loopback_peer(("::1", 1, 0, 0))
-    assert _is_loopback_peer(("::ffff:127.0.0.1", 1, 0, 0))
-    assert not _is_loopback_peer(("203.0.113.7", 1))
-
-
-def test_prefixed_reader_replays_bytes_in_order():
-    async def scenario():
-        reader = asyncio.StreamReader()
-        reader.feed_data(b"world")
-        reader.feed_eof()
-        wrapper = _PrefixedReader(reader, b"hello ")
-        assert await wrapper.readexactly(5) == b"hello"
-        assert await wrapper.read(2) == b" w"
-        assert await wrapper.read() == b"orld"
-
-    asyncio.run(scenario())

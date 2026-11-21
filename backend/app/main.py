@@ -31,8 +31,8 @@ async def lifespan(app: FastAPI):
     auth.bootstrap()
     manager = Manager()
     manager.backups = BackupManager(manager)
-    manager.proxy = MinecraftProxy(manager, PROXY_HOST, PROXY_PORT)
     manager.voice = VoiceProxy(manager, VOICE_HOST, VOICE_PORT)
+    manager.proxy = MinecraftProxy(manager, PROXY_HOST, PROXY_PORT, VOICE_HOST, VOICE_PORT)
     manager.auth_lobby = AuthLobby(manager)
     manager.bedrock = BedrockProxy(manager, BEDROCK_HOST, BEDROCK_PORT)
     api.manager = manager

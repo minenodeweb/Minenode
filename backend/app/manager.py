@@ -355,6 +355,9 @@ class ServerInstance:
         if state != self.state:
             self.state = state
             self.broadcast({"type": "state", "state": state, "summary": self.summary()})
+            vp = getattr(self.m, "voice", None)
+            if vp is not None:
+                vp.sync()
 
     def set_job(self, title: str | None, stage: str = "", progress: float | None = None) -> None:
         self.job = None if title is None else {"title": title, "stage": stage, "progress": progress}
@@ -677,6 +680,9 @@ class ServerInstance:
                 raise ServerError(str(exc)) from exc
             self.started_at = time.time()
             self._start_seq = self._seq
+            vp = getattr(self.m, "voice", None)
+            if vp is not None:
+                vp.sync()
             try:
                 self._ps = psutil.Process(self.proc.pid)
                 self._ps.cpu_percent(None)
@@ -1128,6 +1134,8 @@ class Manager:
         self.servers_store.save()
         if self.bedrock:
             self.bedrock.request_apply()
+        if self.voice:
+            self.voice.sync()
         await asyncio.to_thread(shutil.rmtree, inst.dir, True)
         (PANEL_DIR / "players" / f"{sid}.json").unlink(missing_ok=True)
         if delete_backups and self.backups:

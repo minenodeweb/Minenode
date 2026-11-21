@@ -47,8 +47,19 @@ echo ==^> Docker Engine jest gotowy!
 :: odpowiedni etap i uruchamia ponowną kompilację.
 
 :BUILD
-echo ==^> Budowanie obrazu: %IMAGE_NAME%...
-docker build -t "%IMAGE_NAME%" .
+set "PICOLIMBO_TAG=latest"
+set "PICOLIMBO_URL="
+for /f "usebackq delims=" %%I in (`curl.exe -fsSI -o NUL -w "%%{redirect_url}" "https://github.com/Quozul/PicoLimbo/releases/latest" 2^>nul`) do (
+    set "PICOLIMBO_URL=%%I"
+)
+if defined PICOLIMBO_URL (
+    set "CANDIDATE=!PICOLIMBO_URL:*/releases/tag/=!"
+    if not "!CANDIDATE!"=="!PICOLIMBO_URL!" if not "!CANDIDATE!"=="" (
+        set "PICOLIMBO_TAG=!CANDIDATE!"
+    )
+)
+echo ==^> Budowanie obrazu: %IMAGE_NAME% (PicoLimbo: !PICOLIMBO_TAG!)...
+docker build --build-arg "PICOLIMBO_TAG=!PICOLIMBO_TAG!" -t "%IMAGE_NAME%" .
 
 if %errorlevel% neq 0 (
     echo [BŁĄD] Wystąpił błąd podczas budowania obrazu.

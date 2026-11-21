@@ -4,7 +4,6 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
-import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -16,8 +15,6 @@ if TYPE_CHECKING:
     from .manager import Manager
 
 log = logging.getLogger("minenode.auth_lobby")
-FIRST_UPDATE_CHECK = 60  # seconds after start; later every picolimbo.CHECK_INTERVAL
-RETRY_AFTER_FAILURE = 15 * 60
 
 
 class AuthLobby:
@@ -30,15 +27,15 @@ class AuthLobby:
         self.ready = False
         self._log_task: asyncio.Task | None = None
         self._watch_task: asyncio.Task | None = None
-        self._update_task: asyncio.Task | None = None
-        self.updater = picolimbo.Updater()
+        self._cleanup_task: asyncio.Task | None = None
         self.binary: Path | None = None
-        self._update_lock = asyncio.Lock()
-        self._build_task: asyncio.Task | None = None
 
     @property
     def running(self) -> bool:
         return self.proc is not None and self.proc.returncode is None and self.ready
+
+    def picolimbo_status(self) -> dict:
+        return picolimbo.status()
 
     def _log(self, text: str) -> None:
         # Keep the lobby intentionally quiet; its console is not exposed as a
@@ -48,8 +45,7 @@ class AuthLobby:
 
     async def _ensure(self) -> None:
         self.dir.mkdir(parents=True, exist_ok=True)
-        # Compiled on this server from the author's source; until the first build exists the lobby waits.
-        self.binary = await self.updater.binary()
+        self.binary = picolimbo.binary()
         (self.dir / "server.toml").write_text(
             f'bind = "127.0.0.1:{self.port}"\n'
             'welcome_message = "WYMAGANE LOGOWANIE"\n'
@@ -70,14 +66,11 @@ class AuthLobby:
     async def start(self) -> None:
         if self.running:
             return
-        if self.updater.ready_binary() is None and not picolimbo.LOCAL_OVERRIDE:
-            # The first build takes minutes: never hold up the panel's start for it.
-            if self._build_task is None or self._build_task.done():
-                self._build_task = asyncio.create_task(self._first_build(), name="picolimbo-build")
-            self.error = "PicoLimbo jest kompilowane na tym serwerze – lobby logowania ruszy po zakończeniu."
-            if self._update_task is None or self._update_task.done():
-                self._update_task = asyncio.create_task(self._update_loop(), name="picolimbo-update")
-            return
+        if self._cleanup_task is None and any((self.dir / name).exists() for name in picolimbo._LEGACY_DIRS):
+            self._cleanup_task = asyncio.create_task(
+                asyncio.to_thread(picolimbo.cleanup_legacy_data, self.dir),
+                name="picolimbo-cleanup",
+            )
         try:
             await self._ensure()
             self.proc = await asyncio.create_subprocess_exec(
@@ -106,52 +99,24 @@ class AuthLobby:
                     await asyncio.sleep(0.25)
             if not self.ready:
                 raise RuntimeError("PicoLimbo lobby nie zaczęło nasłuchiwać w ciągu 90 sekund")
+        except picolimbo.PicoLimboError as exc:
+            self.error = str(exc)
+            self.ready = False
+            self.proc = None
+            log.warning("Authentication lobby unavailable: %s", exc)
         except Exception as exc:  # noqa: BLE001
             self.error = str(exc)
             self.ready = False
             log.exception("Authentication lobby failed to start")
             self.proc = None
-        finally:
-            if self._update_task is None or self._update_task.done():
-                self._update_task = asyncio.create_task(self._update_loop(), name="picolimbo-update")
-
-    async def _first_build(self) -> None:
-        await self.updater.update(force=True)
-        if self.updater.ready_binary() is not None:
-            await self.start()
-        else:
-            self.error = self.updater.error
-
-    async def _update_loop(self) -> None:
-        """Rebuild PicoLimbo when the author releases a new version; also retries a lobby that never started."""
-        await asyncio.sleep(FIRST_UPDATE_CHECK)
-        while True:
-            changed = await self.check_for_update()
-            if not changed and not self.running and self.proc is None:
-                await self.start()  # e.g. GitHub was unreachable on the first start
-            await asyncio.sleep(RETRY_AFTER_FAILURE if self.updater.error else picolimbo.CHECK_INTERVAL)
-
-    async def check_for_update(self, force: bool = False) -> bool:
-        """Build a newer PicoLimbo if there is one (or replace an old prebuilt one) and restart the lobby."""
-        async with self._update_lock:  # the panel button and the timer may ask at the same time
-            if not await self.updater.update(force=force):
-                return False
-            log.info("PicoLimbo updated – restarting the authentication lobby")
-            await self._stop_process()
-            await self.start()
-            return True
 
     async def stop(self) -> None:
-        for task in (self._build_task,):
-            if task and not task.done():
-                task.cancel()
-                with contextlib.suppress(asyncio.CancelledError):
-                    await task
-        if self._update_task:
-            self._update_task.cancel()
+        if self._cleanup_task is not None:
+            if not self._cleanup_task.done():
+                self._cleanup_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
-                await self._update_task
-            self._update_task = None
+                await self._cleanup_task
+            self._cleanup_task = None
         await self._stop_process()
 
     async def _stop_process(self) -> None:

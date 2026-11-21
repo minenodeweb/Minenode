@@ -1,10 +1,11 @@
 """Login lobby gate: one owner per name, limited failed visits, fail-closed name parsing."""
 import time
+from types import SimpleNamespace
 
 import pytest
 
 from app import auth_sessions, proxy
-from app.proxy import LobbyGate, safe_player_name
+from app.proxy import LobbyGate, MinecraftProxy, safe_player_name
 
 
 @pytest.fixture(autouse=True)
@@ -60,7 +61,6 @@ def test_old_failures_expire(monkeypatch):
 
 
 def test_backend_listens_on_loopback_only(tmp_path, monkeypatch):
-    from types import SimpleNamespace
     from app import manager
     from app.properties import read_properties
     (tmp_path / "server.properties").write_text("server-ip=0.0.0.0\nserver-port=25565\n")
@@ -72,61 +72,20 @@ def test_backend_listens_on_loopback_only(tmp_path, monkeypatch):
 
 # ---------------------------------------------------------------- routing (fail closed)
 
-class _Writer:
-    def __init__(self):
-        self.data = b""
-        self.closed = False
-
-    def get_extra_info(self, key, default=None):
-        return {"peername": ("198.51.100.66", 50000), "sockname": ("0.0.0.0", 25565)}.get(key, default)
-
-    def write(self, data):
-        self.data += data
-
-    async def drain(self):
-        pass
-
-    def close(self):
-        self.closed = True
-
-    async def wait_closed(self):
-        pass
-
-    def can_write_eof(self):
-        return False
-
-
-def _login(name_bytes: bytes, protocol=767) -> bytes:
-    from app.proxy import mc_string, packet, varint
-    hs = packet(0, varint(protocol) + mc_string("survival.example.com") + b"\x63\xdd" + varint(2))
-    login = packet(0, varint(len(name_bytes)) + name_bytes + b"\x00" * 16)
-    return hs + login
-
-
-def _route(data: bytes, monkeypatch):
-    import asyncio
-    from types import SimpleNamespace
-    from app.proxy import MinecraftProxy
-    started = []
+def test_login_with_an_unreadable_name_is_refused_not_passed_through():
     inst = SimpleNamespace(online_mode=False, cfg=SimpleNamespace(auth_enabled=True, id="s1"),
-                           state="online", request_start=lambda: started.append(1) or False)
-    lobby = SimpleNamespace(running=True, port=1)
+                           state="online", request_start=lambda: False)
+    lobby = SimpleNamespace(running=True, port=25999)
     m = SimpleNamespace(resolve_host=lambda h: inst, auth_lobby=lobby, settings=SimpleNamespace())
     p = MinecraftProxy(m, "127.0.0.1", 0)
 
-    async def go():
-        reader = asyncio.StreamReader()
-        reader.feed_data(data)
-        reader.feed_eof()
-        await p._route(reader, _Writer(), ("198.51.100.66", 50000))
-    return asyncio.run(go())
-
-
-def test_login_with_an_unreadable_name_is_refused_not_passed_through(monkeypatch):
-    from app.proxy import ProtocolError
-    for name in (b"a" * 40, b"evil\nadmin", b""):
-        with pytest.raises(ProtocolError):
-            _route(_login(name), monkeypatch)
+    for bad_name in (None, "", "a" * 40, "evil\nadmin"):
+        dec = p.handle_mc_handshake({
+            "conn_id": 1, "peer_ip": "198.51.100.66", "protocol": 767,
+            "hostname": "survival.example.com", "next_state": 2,
+            "player": bad_name, "edition": "java",
+        })
+        assert dec == {"action": "close"}
 
 
 # ---------------------------------------------------------------- who is online
@@ -138,7 +97,6 @@ def _instance(tmp_path, monkeypatch):
     monkeypatch.setattr(manager, "SERVERS_DIR", tmp_path)
     monkeypatch.setattr(manager, "JsonStore", lambda path, default: JsonStore(tmp_path / "players.json", default))
     cfg = ServerConfig(id="s1", name="S", type="purpur", mc_version="26.3", subdomain="s", internal_port=25600)
-    from types import SimpleNamespace
     inst = manager.ServerInstance(SimpleNamespace(voice=None), cfg)
     inst.broadcast = lambda msg: None
     return inst
@@ -205,29 +163,32 @@ def test_a_whitelist_kick_is_not_remembered_as_a_player(tmp_path, monkeypatch):
 
 
 def test_geyser_connections_are_checked_as_bedrock_and_direct_ones_as_java(monkeypatch):
-    import asyncio
-    from types import SimpleNamespace
-    from app import auth_sessions
-    from app.proxy import MinecraftProxy, proxy_v2_header
+    from app.models import PanelSettings
     seen = []
     monkeypatch.setattr(auth_sessions, "valid", lambda name, ip, protocol=None, edition=None: seen.append((ip, edition)) or False)
     monkeypatch.setattr(auth_sessions, "set_pending", lambda *a: None)
 
-    async def no_reply(*a, **kw):
-        pass
-    monkeypatch.setattr(MinecraftProxy, "_reply_offline", no_reply)
-    inst = SimpleNamespace(online_mode=False, cfg=SimpleNamespace(auth_enabled=True, id="s1"), state="online",
-                           props=lambda: {})
-    lobby = SimpleNamespace(running=True, port=1)  # nothing listens: the route ends with a kick message
-    m = SimpleNamespace(resolve_host=lambda h: inst, auth_lobby=lobby, settings=SimpleNamespace(kick_starting="x"))
+    inst = SimpleNamespace(
+        online_mode=False,
+        cfg=SimpleNamespace(auth_enabled=True, id="s1", name="S", mc_version="1.21.4",
+                            start_on_join=False, installed=True, proxy_protocol=False),
+        state="online",
+        props=lambda: {},
+        address=lambda: "survival.example.com",
+        bind_voice=lambda *a: None,
+    )
+    lobby = SimpleNamespace(running=True, port=25999)
+    m = SimpleNamespace(resolve_host=lambda h: inst, auth_lobby=lobby, settings=PanelSettings())
+    p = MinecraftProxy(m, "127.0.0.1", 0)
 
-    async def route(data, peer):
-        reader = asyncio.StreamReader()
-        reader.feed_data(data)
-        reader.feed_eof()
-        await MinecraftProxy(m, "127.0.0.1", 0)._route(reader, _Writer(), peer)
-
-    asyncio.run(route(_login(b"Steve"), ("203.0.113.7", 5000)))
-    geyser = proxy_v2_header(("198.51.100.20", 40000), ("127.0.0.1", 25565))
-    asyncio.run(route(geyser + _login(b"Steve"), ("127.0.0.1", 6000)))
+    p.handle_mc_handshake({
+        "conn_id": 1, "peer_ip": "203.0.113.7", "protocol": 767,
+        "hostname": "survival.example.com", "next_state": 2,
+        "player": "Steve", "edition": "java",
+    })
+    p.handle_mc_handshake({
+        "conn_id": 2, "peer_ip": "198.51.100.20", "protocol": 767,
+        "hostname": "survival.example.com", "next_state": 2,
+        "player": "Steve", "edition": "bedrock",
+    })
     assert seen == [("203.0.113.7", "java"), ("198.51.100.20", "bedrock")]

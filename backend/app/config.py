@@ -47,6 +47,9 @@ CURSEFORGE_API_KEY_ENV = os.environ.get("CURSEFORGE_API_KEY", "")
 SECURE_COOKIES = os.environ.get("MINENODE_SECURE_COOKIES", "false").lower() in ("1", "true", "yes")
 
 STATIC_DIR = Path(os.environ.get("MINENODE_STATIC", Path(__file__).resolve().parent.parent / "static"))
+PROXY_BIN = Path(os.environ.get("MINENODE_PROXY_BIN", Path(__file__).resolve().parent.parent / "bin" / "minenode-proxy"))
+PICOLIMBO_BIN = Path(os.environ.get("MINENODE_PICOLIMBO_BINARY", Path(__file__).resolve().parent.parent / "bin" / "pico_limbo"))
+PICOLIMBO_META = Path(os.environ.get("MINENODE_PICOLIMBO_META", PICOLIMBO_BIN.with_name("picolimbo-version.json")))
 
 USER_AGENT = f"minenode-panel/{VERSION} (self-hosted Minecraft server manager)"
 

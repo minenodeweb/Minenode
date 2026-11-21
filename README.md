@@ -130,16 +130,11 @@ Sessions last 30 minutes from the last entry or exit and are bound to both playe
 
 #### Where PicoLimbo comes from and how it updates
 
-The lobby runs [PicoLimbo](https://github.com/Quozul/PicoLimbo) by Quozul, **built on your server from the author's own source code**. MineNode does not publish PicoLimbo binaries and keeps no copy of its source. MineNode's `/login` and `/register` module is a small patch (`backend/app/assets/picolimbo/minenode-auth.patch`) – our own code, applied on top of the author's release.
+The lobby runs [PicoLimbo](https://github.com/Quozul/PicoLimbo) by Quozul (MIT License), **compiled during the Docker image build from the author's latest stable release**. MineNode keeps no copy of PicoLimbo's source files in this repository — only MineNode's `/login` and `/register` module as a small patch ([`backend/app/assets/picolimbo/minenode-auth.patch`](backend/app/assets/picolimbo/minenode-auth.patch)), applied at build time in the dedicated `picolimbo` Dockerfile stage.
 
-On first start the panel:
+The compiled `/app/bin/pico_limbo` binary, its build metadata (`/app/bin/picolimbo-version.json`), and PicoLimbo's license (`/app/licenses/PICOLIMBO-LICENSE`) are copied into the runtime image with no compiler or Rust toolchain installed at runtime, so the authentication lobby starts immediately with zero extra storage used under `/data/auth-lobby/`. Legacy `rust/`, `build/`, and `bin/` directories under `/data/auth-lobby/` from older versions are cleaned up automatically on startup.
 
-1. asks the author's repository for its newest release (GitHub API, or the release page when the API rate limit is reached),
-2. installs the official Rust toolchain with `rustup` into `auth-lobby/rust/` (PicoLimbo's `rust-toolchain.toml` decides the version),
-3. downloads that release's source archive from `github.com/Quozul/PicoLimbo`, applies the patch and runs `cargo build --release` at a low CPU priority on half of the cores,
-4. installs the result into `auth-lobby/bin/` and deletes the sources and build files (the toolchain and crate cache stay for the next build, roughly 1 GB).
-
-The first build takes a few minutes; the panel and the game servers start normally in the meantime and the **Autoryzacja** tab shows the progress. Every 6 hours the panel checks for a new upstream release (or a changed login module) and rebuilds; the lobby keeps running the previous build until the new one is ready. A failed build is shown with the end of its log and retried after 6 hours or with *Check for a PicoLimbo update*. A binary downloaded by older MineNode versions from MineNode's own releases is replaced by a local build automatically. The Docker image contains the C compiler (`gcc`) and `patch` that the build needs.
+To update PicoLimbo to a newer upstream stable release, rebuild or pull a newer MineNode image (`deploy.cmd` resolves the latest stable `Quozul/PicoLimbo` release tag automatically and passes it as `--build-arg PICOLIMBO_TAG=...`; for manual builds pass `--build-arg PICOLIMBO_TAG=<tag>` or `--no-cache-filter picolimbo`).
 
 ### Portable server packages
 
@@ -196,6 +191,7 @@ Some authors block API downloads of their files. MineNode lists those files in t
 |----------|---------|-------------|
 | `MINENODE_PORT` | `8080` | Panel port |
 | `MINENODE_PROXY_PORT` | `25565` | Public Minecraft port (proxy) |
+| `MINENODE_PROXY_BIN` | `/app/bin/minenode-proxy` | Path to the compiled Rust transport proxy binary |
 | `MINENODE_VOICE_PORT` | `24454` | Public Simple Voice Chat UDP port |
 | `MINENODE_BEDROCK_PORT` | `19132` | Public Bedrock port (Geyser, TCP + UDP) |
 | `MINENODE_BEDROCK_SAVED_LOGINS` | – | Comma-separated Bedrock usernames whose Microsoft login token Geyser should save and refresh |
@@ -204,9 +200,7 @@ Some authors block API downloads of their files. MineNode lists those files in t
 | `MINENODE_DATA` | `/data` | Data directory |
 | `MINENODE_ADMIN_USER` / `MINENODE_ADMIN_PASSWORD` | – | Account created on first start (instead of the wizard) |
 | `MINENODE_SECURE_COOKIES` | `false` | Send session cookies over HTTPS only |
-| `MINENODE_PICOLIMBO_REPO` | `Quozul/PicoLimbo` | Repository of the PicoLimbo author whose newest release is compiled for the authentication lobby |
-| `MINENODE_PICOLIMBO_BINARY` | – | Run this local PicoLimbo binary instead of compiling one (no automatic updates) |
-| `GITHUB_TOKEN` | – | Optional token for the GitHub API (only needed behind a shared IP that hits GitHub's rate limit) |
+| `MINENODE_PICOLIMBO_BINARY` | `/app/bin/pico_limbo` | Path to the compiled PicoLimbo binary (override to run a custom local build) |
 | `MINENODE_TRUSTED_PROXIES` | `127.0.0.1` | Reverse proxies allowed to set `X-Forwarded-For` (comma-separated IPs or CIDR ranges, e.g. `172.16.0.0/12`). Used for the client IP in the login limit |
 | `CURSEFORGE_API_KEY` | – | CurseForge API key |
 | `PUID` / `PGID` | `1000` | User the panel and servers run as |
@@ -222,29 +216,31 @@ Some authors block API downloads of their files. MineNode lists those files in t
                  │          │           Vue 3 SPA (static files)                              │
                  │          ▼                                                                 │
                  │      Manager ── ServerInstance × N ── java -Xmx… -jar …  (:25600, :25601…)  │
-                 │          │            ▲  stdin/stdout (console, commands, log parsing)      │
- Minecraft ─────▶│ :25565 MinecraftProxy ┘  handshake → hostname → internal port               │
-                 │          └─ HTTP GET /rp/… → resource pack files                           │
- voice (UDP) ───▶│ :24454 VoiceProxy ── player UUID → server's internal SVC port (:24500…)    │
+                 │          ▲                                                                 │
+                 │          │ IPC (Unix socket, auth/routing/MOTD/events only)                │
+                 │          ▼                                                                 │
+ Minecraft ─────▶│ :25565 minenode-proxy (Rust/tokio) ── TCP tunnel / HTTP resource packs     │
+ voice (UDP) ───▶│ :24454 minenode-proxy (Rust/tokio) ── UUID → internal SVC port (:24500…)   │
  Bedrock ───────▶│ :19132 Geyser + MineNodeRouter ── hostname ──▶ :25565 proxy                │
                  │   Java (Temurin, auto)   Providers (Mojang/Paper/Purpur/Fabric/…)          │
                  │   Backups (zip)          Modpacks & content (Modrinth / CurseForge)        │
                  └──────────────────────────────────── /data ─────────────────────────────────┘
 ```
 
-**Backend** (`backend/app`, Python 3.12, FastAPI, asyncio):
+**Backend** (`backend/app`, Python 3.12, FastAPI, asyncio + `backend/proxy`, Rust `tokio`):
 
 | Module | Role |
 |--------|------|
 | `main.py` | App and lifecycle (graceful server shutdown on `docker stop`), CSRF, SPA serving |
 | `api.py` | REST + WebSocket endpoints |
 | `manager.py` | Server processes, console, metrics (psutil), log parsing (players, whitelist rejections), scheduler, idle shutdown |
-| `proxy.py` | Minecraft-aware TCP proxy: parses Handshake/Login Start, routes by host, answers for offline servers, optional inbound PROXY protocol v2 (real Bedrock IP), serves resource packs over HTTP on the same port |
+| `backend/proxy/` | Native Rust (`tokio`) TCP + UDP transport proxy (`25565/tcp` and `24454/udp`): inbound/outbound PROXY protocol v2, Handshake/Login Start framing, bidirectional TCP tunneling, `TCP_INFO` RTT sampling, HTTP resource-pack file streaming, and UDP voice routing by player UUID |
+| `proxy.py` | Proxy control plane & IPC supervisor: host routing, offline/starting/waking MOTD/kick payloads, whitelist & start-on-join triggers, `LobbyGate`, resource-pack token verification, and passive fingerprint coordination |
 | `fingerprint.py` | Passive Client Information / Plugin Message sniffer and version-tolerant packet framing used by the session fingerprint |
 | `auth_sessions.py` | Shared player account, session and fingerprint storage used by the proxy and the PicoLimbo lobby |
 | `auth_lobby.py` | Hidden PicoLimbo authentication lobby lifecycle |
-| `picolimbo.py` | Builds PicoLimbo from the author's source (with the MineNode login patch) on the server and keeps it up to date |
-| `voice.py` | UDP proxy for Simple Voice Chat (routing by player UUID) and SVC config management |
+| `picolimbo.py` | Locates the Docker-built PicoLimbo binary and version metadata, and removes legacy runtime build directories |
+| `voice.py` | Simple Voice Chat control plane (pushes UUID/port routing tables to `minenode-proxy` over IPC and manages SVC config) |
 | `bedrock.py` | Shared Geyser Bedrock gateway: downloads Geyser, generates `config.yml` and hostname routes, manages the process and global auth mode. `backend/bedrock_ext/` is the bundled MineNodeRouter extension that resolves each Bedrock hostname (compiled during the Docker build) |
 | `providers.py` | Version discovery and engine installation (incl. Forge/NeoForge/Quilt installers) |
 | `java.py` | Java selection and download from Adoptium |

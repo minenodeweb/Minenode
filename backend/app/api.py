@@ -164,26 +164,6 @@ async def remove_user(username: str, me: str = Depends(auth.require_user)):
 
 # ====================================================================== player authentication
 
-@router.post("/player-auth/lobby/update")
-async def player_auth_lobby_update(_: str = Depends(auth.require_user)):
-    """Check the author's repository for a newer PicoLimbo now (normally every few hours) and build it.
-
-    A build takes minutes, so it continues in the background; the answer comes back after a few seconds
-    with ``building: true`` and the panel follows the progress in the lobby status."""
-    lobby = getattr(manager, "auth_lobby", None)
-    if lobby is None:
-        raise HTTPException(503, "Lobby autoryzacji nie działa")
-    if lobby.updater.building:
-        return {"updated": False, "building": True, "running": lobby.running, "error": lobby.error,
-                "picolimbo": lobby.updater.status()}
-    task = lobby._manual_update = asyncio.create_task(lobby.check_for_update(force=True))  # keep a reference
-    with contextlib.suppress(asyncio.TimeoutError):
-        await asyncio.wait_for(asyncio.shield(task), 4)
-    changed = task.done() and not task.cancelled() and task.result()
-    return {"updated": bool(changed), "building": not task.done(), "running": lobby.running, "error": lobby.error,
-            "picolimbo": lobby.updater.status()}
-
-
 @router.get("/player-auth/sessions")
 async def player_auth_sessions(q: str = "", _: str = Depends(auth.require_user)):
     """Active game logins. Passwords and hashes are never returned."""
@@ -313,7 +293,7 @@ async def get_settings(_: str = Depends(auth.require_user)):
         "error": lobby.error if lobby else None,
         "port": getattr(lobby, "port", None),
         "session_minutes": 30,
-        "picolimbo": lobby.updater.status() if lobby else None,
+        "picolimbo": lobby.picolimbo_status() if lobby else None,
     }
     return d
 
@@ -2145,7 +2125,7 @@ def _voice_state(inst: ServerInstance) -> dict:
         "enabled": inst.cfg.voice_enabled, "internal_port": inst.cfg.voice_port, "public_port": VOICE_PORT,
         "public_host": host, "voice_host": f"{host}:{VOICE_PORT}" if host else None,
         "config_file": str(voice.config_path(inst).relative_to(inst.dir)),
-        "proxy_listening": bool(vp and vp.transport), "proxy_error": vp.error if vp else None,
+        "proxy_listening": bool(vp and vp.listening), "proxy_error": vp.error if vp else None,
         "sessions": (vp.stats()["per_server"].get(inst.cfg.id, 0) if vp else 0), "running": inst.running,
     }
 
@@ -2172,6 +2152,8 @@ async def voice_set(sid: str, body: VoiceBody, _: str = Depends(auth.require_use
     if body.enabled:
         from .config import VOICE_PORT
         voice.write_config(inst, VOICE_PORT)
+    if manager.voice:
+        manager.voice.sync()
     return {**_voice_state(inst), "restart_required": inst.running}
 
 
@@ -2187,6 +2169,8 @@ async def voice_install(sid: str, _: str = Depends(auth.require_user)):
         manager.save_server(inst.cfg)
     from .config import VOICE_PORT
     voice.write_config(inst, VOICE_PORT)
+    if manager.voice:
+        manager.voice.sync()
     return {**_voice_state(inst), "installed_files": ins.installed, "restart_required": inst.running}
 
 

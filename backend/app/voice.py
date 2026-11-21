@@ -1,19 +1,17 @@
-"""Simple Voice Chat support: one public UDP port shared by every server.
+"""Simple Voice Chat control plane (datagram forwarding runs in minenode-proxy).
 
 Every SVC packet a client sends starts with a magic byte (0xFF) followed by the player's UUID in
-plain text (the rest is encrypted with a per-player secret). That lets the proxy route each player's
-datagrams to the right server's internal voice port without touching the payload. Replies from the
-server go back to the player through a dedicated upstream socket per player.
+plain text. Python synchronizes the active ``server_id -> voice_port`` and ``player_uuid ->
+server_id`` routing tables over IPC so the Rust proxy forwards UDP datagrams on the hot path
+without involving Python.
 """
 from __future__ import annotations
 
-import asyncio
 import contextlib
 import logging
-import time
 import uuid as uuidlib
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from .properties import read_properties, write_properties
 
@@ -23,8 +21,6 @@ if TYPE_CHECKING:
 log = logging.getLogger("minenode.voice")
 
 SVC_PROJECT_ID = "9eGKb6K1"  # Simple Voice Chat on Modrinth
-MAGIC = 0xFF
-IDLE_TIMEOUT = 90
 
 
 def config_path(inst: "ServerInstance") -> Path:
@@ -33,7 +29,7 @@ def config_path(inst: "ServerInstance") -> Path:
 
 
 def is_installed(inst: "ServerInstance") -> bool:
-    from .content import content_dir, load_meta, kind_for
+    from .content import content_dir, kind_for, load_meta
     if not kind_for(inst.cfg.type):
         return False
     meta = load_meta(inst)["files"]
@@ -69,116 +65,84 @@ def write_config(inst: "ServerInstance", public_port: int) -> None:
     write_properties(path, props)
 
 
-class _Session:
-    __slots__ = ("transport", "sid", "last", "packets")
-
-    def __init__(self, transport, sid: str):
-        self.transport, self.sid, self.last, self.packets = transport, sid, time.time(), 0
-
-
-class _Upstream(asyncio.DatagramProtocol):
-    def __init__(self, proxy: "VoiceProxy", client: tuple):
-        self.proxy, self.client = proxy, client
-
-    def datagram_received(self, data: bytes, addr) -> None:
-        sess = self.proxy.sessions.get(self.client)
-        if sess:
-            sess.last = time.time()
-        if self.proxy.transport:
-            self.proxy.transport.sendto(data, self.client)
-            self.proxy.bytes_down += len(data)
-
-
-class VoiceProxy(asyncio.DatagramProtocol):
+class VoiceProxy:
     def __init__(self, manager: "Manager", host: str, port: int):
         self.m = manager
         self.host, self.port = host, port
-        self.transport: asyncio.DatagramTransport | None = None
-        self.sessions: dict[tuple, _Session] = {}
-        self.players: dict[str, str] = {}  # player uuid -> server id
-        self._pending: set[tuple] = set()
+        self.listening = False
         self.error: str | None = None
-        self.bytes_up = self.bytes_down = self.dropped = 0
-        self._janitor: asyncio.Task | None = None
+        self.players: dict[str, str] = {}  # 32-char lowercase hex UUID -> server id
+        self.sessions_count = 0
+        self.bytes_up = 0
+        self.bytes_down = 0
+        self.dropped = 0
+        self.per_server: dict[str, int] = {}
+        self._last_servers: dict[str, int] | None = None
 
-    # ------------------------------------------------------------ routing table
     def bind(self, player_uuid: str | None, sid: str) -> None:
-        if player_uuid:
-            with contextlib.suppress(ValueError):
-                self.players[str(uuidlib.UUID(player_uuid))] = sid
+        if not player_uuid:
+            return
+        with contextlib.suppress(ValueError):
+            hex_uid = uuidlib.UUID(player_uuid).hex
+            self.players[hex_uid] = sid
+            proxy = getattr(self.m, "proxy", None)
+            if proxy is not None:
+                proxy.send_command({"t": "voice_bind", "uuid": hex_uid, "sid": sid})
 
-    def route(self, player_uuid: str) -> "ServerInstance | None":
-        inst = self.m.instances.get(self.players.get(player_uuid, ""))
-        if inst and inst.cfg.voice_enabled and inst.running:
-            return inst
-        candidates = [i for i in self.m.instances.values() if i.cfg.voice_enabled and i.running and i.cfg.voice_port]
-        return candidates[0] if len(candidates) == 1 else None
+    def sync(self, *, force: bool = False) -> None:
+        """Push active voice-enabled server ports and known player bindings to the Rust proxy."""
+        servers: dict[str, int] = {
+            sid: int(inst.cfg.voice_port)
+            for sid, inst in self.m.instances.items()
+            if inst.cfg.voice_enabled and inst.running and inst.cfg.voice_port
+        }
+        if not force and self._last_servers == servers:
+            return
+        proxy = getattr(self.m, "proxy", None)
+        if proxy is not None and proxy.send_command({
+            "t": "voice_sync",
+            "servers": servers,
+            "players": dict(self.players),
+        }):
+            self._last_servers = servers
+
+    def apply_ready(self, msg: dict[str, Any]) -> None:
+        self.listening = bool(msg.get("voice_listening", False))
+        self.error = msg.get("voice_error")
+        if self.listening:
+            log.info("Voice chat proxy listening on udp %s:%s", self.host, msg.get("voice_port", self.port))
+        elif self.error:
+            log.error("Voice proxy could not bind udp %s:%s – %s", self.host, self.port, self.error)
+
+    def apply_telemetry(self, msg: dict[str, Any]) -> None:
+        if "voice_listening" in msg:
+            self.listening = bool(msg["voice_listening"])
+        self.error = msg.get("voice_error")
+        self.sessions_count = int(msg.get("voice_sessions", self.sessions_count))
+        self.bytes_up = int(msg.get("voice_bytes_up", self.bytes_up))
+        self.bytes_down = int(msg.get("voice_bytes_down", self.bytes_down))
+        self.dropped = int(msg.get("voice_dropped", self.dropped))
+        per = msg.get("voice_per_server")
+        if isinstance(per, dict):
+            self.per_server = {str(k): int(v) for k, v in per.items()}
 
     def stats(self) -> dict:
-        return {"host": self.host, "port": self.port, "listening": self.transport is not None, "error": self.error,
-                "sessions": len(self.sessions), "bytes_up": self.bytes_up, "bytes_down": self.bytes_down,
-                "per_server": {sid: sum(1 for s in self.sessions.values() if s.sid == sid)
-                               for sid in {s.sid for s in self.sessions.values()}}}
+        return {
+            "host": self.host,
+            "port": self.port,
+            "listening": self.listening,
+            "error": self.error,
+            "sessions": self.sessions_count,
+            "bytes_up": self.bytes_up,
+            "bytes_down": self.bytes_down,
+            "per_server": dict(self.per_server),
+        }
 
-    # ------------------------------------------------------------ lifecycle
     async def start(self) -> None:
-        loop = asyncio.get_running_loop()
-        try:
-            await loop.create_datagram_endpoint(lambda: self, local_addr=(self.host, self.port))
-            self._janitor = asyncio.create_task(self._cleanup())
-            log.info("Voice chat proxy listening on udp %s:%s", self.host, self.port)
-        except OSError as exc:
-            self.error = str(exc)
-            log.error("Voice proxy could not bind udp %s:%s – %s", self.host, self.port, exc)
+        self.sync(force=True)
 
     async def stop(self) -> None:
-        if self._janitor:
-            self._janitor.cancel()
-        for s in self.sessions.values():
-            s.transport.close()
-        self.sessions.clear()
-        if self.transport:
-            self.transport.close()
-
-    def connection_made(self, transport) -> None:
-        self.transport = transport
-
-    async def _cleanup(self) -> None:
-        while True:
-            await asyncio.sleep(30)
-            now = time.time()
-            for addr, s in list(self.sessions.items()):
-                if now - s.last > IDLE_TIMEOUT or s.sid not in self.m.instances:
-                    s.transport.close()
-                    self.sessions.pop(addr, None)
-
-    # ------------------------------------------------------------ packets
-    def datagram_received(self, data: bytes, addr) -> None:
-        self.bytes_up += len(data)
-        sess = self.sessions.get(addr)
-        if sess:
-            sess.last = time.time()
-            sess.packets += 1
-            sess.transport.sendto(data)
-            return
-        if len(data) < 17 or data[0] != MAGIC or addr in self._pending:
-            self.dropped += 1
-            return
-        player = str(uuidlib.UUID(bytes=data[1:17]))
-        inst = self.route(player)
-        if not inst:
-            self.dropped += 1
-            return
-        self._pending.add(addr)
-        asyncio.get_running_loop().create_task(self._open(addr, inst, data))
-
-    async def _open(self, addr: tuple, inst: "ServerInstance", first: bytes) -> None:
-        try:
-            transport, _ = await asyncio.get_running_loop().create_datagram_endpoint(
-                lambda: _Upstream(self, addr), remote_addr=("127.0.0.1", inst.cfg.voice_port))
-            self.sessions[addr] = _Session(transport, inst.cfg.id)
-            transport.sendto(first)
-        except OSError as exc:
-            log.warning("voice upstream for %s failed: %s", inst.cfg.name, exc)
-        finally:
-            self._pending.discard(addr)
+        self.listening = False
+        self.sessions_count = 0
+        self.per_server.clear()
+        self._last_servers = None

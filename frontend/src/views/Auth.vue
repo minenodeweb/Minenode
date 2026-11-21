@@ -48,29 +48,14 @@
             <div><span class="muted small">{{ $t('Czas sesji') }}</span><span>{{ lobby?.session_minutes || 30 }} min</span></div>
             <div><span class="muted small">{{ $t('Zarejestrowani gracze') }}</span><span>{{ playerAccounts.length }}</span></div>
             <div v-if="pico"><span class="muted small">PicoLimbo</span>
-              <span>
-                <span class="mono">{{ pico.version || (pico.legacy ? $t('stara wersja z wydań MineNode') : '—') }}</span>
-                <span v-if="pico.latest && pico.latest !== pico.version" class="badge amber" style="margin-left: 6px">{{ $t('dostępna {v}', { v: pico.latest }) }}</span>
-                <span v-if="pico.checked_at" class="tiny muted" style="margin-left: 6px">· {{ $t('sprawdzono {when}', { when: timeAgo(pico.checked_at) }) }}</span>
-              </span>
+              <span class="mono">{{ pico.source === 'local' && !pico.version ? $t('lokalna binarka') : (pico.version || '—') }}</span>
             </div>
           </div>
-          <div v-if="pico && pico.building" class="callout info small"><Loader2 class="spin" /><div class="grow" style="min-width: 0">
-            <b>{{ $t('Kompilowanie PicoLimbo: {s}', { s: $t(pico.stage || '') }) }}</b>
-            <span class="tiny muted"> · {{ $t('od {when}', { when: timeAgo(pico.build_started_at) }) }}</span>
-            <div class="tiny muted">{{ $t('Pierwsza kompilacja pobiera Rusta i trwa kilka minut. Serwery gry działają dalej; lobby korzysta z poprzedniej wersji, jeśli jest.') }}</div>
-            <pre v-if="pico.build_log?.length" class="build-log">{{ pico.build_log.join('\n') }}</pre>
-          </div></div>
-          <div v-if="pico && pico.source === 'build'" class="row wrap" style="gap: 8px; align-items: center">
-            <button class="btn sm" :disabled="updating || pico.building" @click="checkUpdate"><Loader2 v-if="updating" class="spin" /><RotateCcw v-else /> {{ $t('Sprawdź aktualizację PicoLimbo') }}</button>
-            <span class="tiny muted">{{ $t('Panel pobiera kod PicoLimbo z repozytorium autora ({repo}), dodaje moduł logowania MineNode i kompiluje go na tym serwerze. Nowe wersje sprawdza co 6 godzin.', { repo: pico.repo }) }}</span>
-          </div>
-          <div v-if="pico?.error" class="callout warn small"><Info />{{ $tm(pico.error) }}</div>
 
           <div class="callout info small"><Info /><div>
             {{ $t('Hasła są przechowywane jako PBKDF2-HMAC-SHA256 (120 000 iteracji) i nigdy nie są pokazywane w panelu ani zwracane przez API. Usunięcie hasła pozwala graczowi zarejestrować się ponownie.') }}
           </div></div>
-          <div v-if="lobby?.error" class="callout warn small"><Info />{{ lobby.error }}</div>
+          <div v-if="lobby?.error" class="callout warn small"><Info />{{ $tm(lobby.error) }}</div>
         </div>
       </section>
 
@@ -244,22 +229,11 @@ import Modal from '../components/Modal.vue'
 import { api } from '../api'
 import { t } from '../i18n'
 import { confirmDialog, toast, toastError } from '../store'
-import { copyText, formatBytes, formatDate, timeAgo } from '../utils'
+import { copyText, formatBytes, formatDate } from '../utils'
 
 const loading = ref(false)
 const lobby = ref(null)
 const pico = computed(() => lobby.value?.picolimbo || null)
-const updating = ref(false)
-async function checkUpdate() {
-  updating.value = true
-  try {
-    const r = await api.post('/player-auth/lobby/update')
-    if (lobby.value) lobby.value = { ...lobby.value, picolimbo: r.picolimbo, running: r.running, error: r.error }
-    if (r.picolimbo?.error) toast(r.picolimbo.error, 'error', 6000)
-    else if (r.building) toast(t('Kompilowanie PicoLimbo rozpoczęte – postęp widać poniżej'), 'success', 3500)
-    else toast(r.updated ? t('Zaktualizowano PicoLimbo do {v} – lobby uruchomione ponownie', { v: r.picolimbo.version }) : t('PicoLimbo jest aktualne'), 'success', 3500)
-  } catch (e) { toastError(e) } finally { updating.value = false }
-}
 const playerSessions = ref([])
 const playerAccounts = ref([])
 const sessionSearch = ref('')
@@ -282,11 +256,9 @@ const filteredAccounts = computed(() => {
 })
 
 let timer = null
-let tick = 0
 onMounted(() => {
   load()
-  // Every 5 s while PicoLimbo compiles (progress), otherwise every 30 s.
-  timer = setInterval(() => { tick++; if (pico.value?.building || tick % 6 === 0) load() }, 5000)
+  timer = setInterval(load, 30000)
 })
 onUnmounted(() => clearInterval(timer))
 
@@ -420,6 +392,4 @@ const skinPartsLabel = (parts) => parts?.length ? parts.map((p) => ({
   .auth-meta, .session-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .grid-2 { grid-template-columns: 1fr; }
 }
-.build-log { margin: 6px 0 0; max-height: 160px; overflow: auto; padding: 8px 10px; border-radius: 6px; background: var(--bg-sunken);
-  font: 11px/1.45 var(--mono, ui-monospace, monospace); white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text-2); }
 </style>
