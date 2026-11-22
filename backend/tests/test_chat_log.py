@@ -18,6 +18,7 @@ def _inst():
     inst._chat_seq = 0
     inst.online = {"Steve": 1.0}
     inst._map_render = None
+    inst._chunky = None
     changed = []
     inst._players_changed = lambda: changed.append(dict(inst.online))
     inst.record_attempt = lambda *a: changed.append(("attempt", a))
@@ -199,3 +200,271 @@ def test_rotated_log_messages_use_the_date_in_the_file_name(tmp_path):
     at, name, text = entry
     assert datetime.datetime.fromtimestamp(at).date() == datetime.date(2026, 11, 18)
     assert (name, text) == ("Alex", "hi")
+
+
+def test_chat_parser_handles_system_chat_tags_and_hex_colors():
+    inst, _ = _inst()
+    hex_nick = "§x§f§f§0§0§0§0S§x§0§0§f§f§0§0t§x§0§0§0§0§f§feve"
+    lines = [
+        "[12:00:00] [Server thread/INFO]: System chat: <Steve> cześć z system chat",
+        "[12:00:01] [Server thread/INFO]: [Not Secure] System chat: <Alex> hej po not secure",
+        "[12:00:02] [Render thread/INFO]: [System] [CHAT] <.Bedrock Kid> wiadomość bedrock",
+        "[12:00:03] [Server thread/INFO]: [EssentialsChat] [Admin] <Hero> tag przed nickiem",
+        "[12:00:04] [Server thread/INFO]: <[Admin] Notch> tag w nawiasach",
+        "[12:00:05] [Server thread/INFO]: <<VIP> Jeb> podwójne nawiasy",
+        f"[12:00:06] [Server thread/INFO]: §7[Not Secure] §f<{hex_nick}§r> §aTęcza",
+        "> [12:00:07 INFO]: §b<Bob> prompt i kolor przed nickiem",
+    ]
+    for line in lines:
+        inst._parse_line(line)
+    assert [(m["name"], m["text"]) for m in inst.chat] == [
+        ("Steve", "cześć z system chat"),
+        ("Alex", "hej po not secure"),
+        (".Bedrock Kid", "wiadomość bedrock"),
+        ("Hero", "tag przed nickiem"),
+        ("Notch", "tag w nawiasach"),
+        ("Jeb", "podwójne nawiasy"),
+        ("Steve", "Tęcza"),
+        ("Bob", "prompt i kolor przed nickiem"),
+    ]
+
+
+def test_plugin_chat_formats_and_false_positive_guards():
+    inst, _ = _inst()
+    inst.online = {"Steve": 1.0}
+    inst.players_store = SimpleNamespace(data={"known": {"hero": {"name": "Hero"}}})
+    inst._chunky = SimpleNamespace(on_line=lambda _line: None)
+
+    # Async Chat Thread accepts plugin formats even without a pre-populated player list
+    inst._parse_line("[12:00:00] [Async Chat Thread - #0/INFO]: [Admin] UnknownNick: cześć z pluginu")
+    inst._parse_line("[12:00:01] [Async Chat Thread - #0/INFO]: ModGuy » siema")
+    # Server thread / Paper logs accept plugin formats when the player is known
+    inst._parse_line("[12:00:02] [Server thread/INFO]: [VIP] Steve: znany gracz online")
+    inst._parse_line("[12:00:03 INFO]: Hero » znany gracz offline")
+    # False positives must NEVER enter chat
+    for noise in (
+        "[12:00:04] [Server thread/INFO]: Warning: Failed to load chunk",
+        "[12:00:05] [Server thread/INFO]: BlueMap: Finished rendering 10 tiles",
+        "[12:00:06] [Server thread/INFO]: Chunky: Task running",
+        "[12:00:07] [Server thread/INFO]: [Steve: Set the time to 1000]",
+        "[12:00:08] [Server thread/INFO]: [Server] <Steve> broadcast udający czat",
+        "[12:00:09] [Server thread/INFO]: Steve issued server command: /home",
+        "[12:00:10 WARN]: <Steve> warning nie jest czatem",
+        "[12:00:11] [Async Chat Thread - #0/ERROR]: <Steve> error nie jest czatem",
+        "[12:00:12] [Server thread/INFO]: <tag attr=\"1\"> xml",
+        "[12:00:13] [Server thread/INFO]: </tag> zamknięcie",
+        "[12:00:14] [Server thread/INFO]: System chat: §e* Steve tańczy",
+    ):
+        inst._parse_line(noise)
+
+    assert [(m["name"], m["text"]) for m in inst.chat] == [
+        ("UnknownNick", "cześć z pluginu"),
+        ("ModGuy", "siema"),
+        ("Steve", "znany gracz online"),
+        ("Hero", "znany gracz offline"),
+    ]
+
+
+def test_flexible_log_timestamps_across_engines(tmp_path):
+    mtime = time.mktime((2026, 11, 22, 18, 0, 0, 0, 0, -1))
+    latest = tmp_path / "latest.log"
+
+    paper = ServerInstance._chat_entry(latest, "[17:00:49 INFO]: <Steve> paper console", mtime)
+    assert paper == (time.mktime((2026, 11, 22, 17, 0, 49, 0, 0, -1)), "Steve", "paper console")
+
+    forge = ServerInstance._chat_entry(
+        latest,
+        "[22Nov2026 17:00:49.123] [Server thread/INFO] [minecraft/MinecraftServer/]: <Alex> neoforge",
+        mtime,
+    )
+    assert forge == (time.mktime((2026, 11, 22, 17, 0, 49, 0, 0, -1)), "Alex", "neoforge")
+
+    iso = ServerInstance._chat_entry(latest, "[2026-11-21 15:10:05] [Server thread/INFO]: <Hero> iso", mtime)
+    assert iso == (time.mktime((2026, 11, 21, 15, 10, 5, 0, 0, -1)), "Hero", "iso")
+
+    millis = ServerInstance._chat_entry(latest, "[17:00:49.456] [Server thread/INFO]: <Notch> ms", mtime)
+    assert millis == (time.mktime((2026, 11, 22, 17, 0, 49, 0, 0, -1)), "Notch", "ms")
+
+    fallback = ServerInstance._chat_entry(latest, "CustomPrefix [Server/INFO]: <Bob> bez czasu", mtime)
+    assert fallback == (mtime, "Bob", "bez czasu")
+
+
+def test_live_stdout_and_latest_log_reconcile_without_duplicates(tmp_path, monkeypatch):
+    monkeypatch.setattr(mgr, "SERVERS_DIR", tmp_path)
+    inst, _ = _inst()
+    inst.cfg = SimpleNamespace(id="srv")
+    logs = tmp_path / "srv" / "logs"
+    logs.mkdir(parents=True)
+    latest = logs / "latest.log"
+    latest.write_text("[12:00:00] [Server thread/INFO]: Done (1.0s)!\n", encoding="utf-8")
+    inst.proc = SimpleNamespace(returncode=None)  # simulate running server
+    inst.refresh_chat_history()
+
+    now_hms = time.strftime("%H:%M:%S")
+    # Live stdout sees identical message twice + another normal message
+    inst._parse_line(f"[{now_hms}] [Server thread/INFO]: <Steve> lol")
+    inst._parse_line(f"[{now_hms}] [Server thread/INFO]: <Steve> lol")
+    assert [(m["name"], m["text"], m["seq"]) for m in inst.chat] == [
+        ("Steve", "lol", 1),
+        ("Steve", "lol", 2),
+    ]
+
+    # Log4j flushes both "lol" lines, an Async Chat Thread line missed by stdout, plus an unterminated line
+    with latest.open("a", encoding="utf-8") as fh:
+        fh.write(f"[{now_hms}] [Server thread/INFO]: <Steve> lol\n")
+        fh.write(f"[{now_hms}] [Server thread/INFO]: <Steve> lol\n")
+        fh.write(f"[{now_hms}] [Async Chat Thread - #0/INFO]: [Admin] Alex: z logu\n")
+        fh.write(f"[{now_hms}] [Server thread/INFO]: <Bob> niepełna linia")
+    t = time.time() + 1
+    os.utime(latest, (t, t))
+    inst.refresh_chat_history()
+    assert [(m["name"], m["text"], m["seq"]) for m in inst.chat] == [
+        ("Steve", "lol", 1),
+        ("Steve", "lol", 2),
+        ("Alex", "z logu", 3),
+    ]
+
+    # Once the newline arrives on disk, Bob's message appears too
+    with latest.open("a", encoding="utf-8") as fh:
+        fh.write("\n")
+    os.utime(latest, (t + 1, t + 1))
+    inst.refresh_chat_history()
+    assert [(m["name"], m["text"], m["seq"]) for m in inst.chat] == [
+        ("Steve", "lol", 1),
+        ("Steve", "lol", 2),
+        ("Alex", "z logu", 3),
+        ("Bob", "niepełna linia", 4),
+    ]
+
+
+def test_rotated_logs_scan_past_empty_restarts_and_skip_corrupt_gz(tmp_path, monkeypatch):
+    monkeypatch.setattr(mgr, "SERVERS_DIR", tmp_path)
+    inst, _ = _inst()
+    inst.cfg = SimpleNamespace(id="srv")
+    logs = tmp_path / "srv" / "logs"
+    logs.mkdir(parents=True)
+    (logs / "latest.log").write_text("[12:00:00] [Server thread/INFO]: Done (1.0s)!\n", encoding="utf-8")
+
+    # 15 empty restart logs + 1 corrupted .gz + 2 valid historical logs with inverted mtimes
+    for i in range(1, 16):
+        with gzip.open(logs / f"2026-11-20-{i}.log.gz", "wt", encoding="utf-8") as fh:
+            fh.write("[10:00:00] [Server thread/INFO]: Done (1.0s)!\n")
+    (logs / "2026-11-19-2.log.gz").write_bytes(b"not-a-valid-gzip-stream")
+
+    older = logs / "2026-11-18-2.log.gz"
+    newer = logs / "2026-11-18-10.log.gz"
+    with gzip.open(older, "wt", encoding="utf-8") as fh:
+        fh.write("[10:00:00] [Server thread/INFO]: <Steve> druga sesja\n")
+    with gzip.open(newer, "wt", encoding="utf-8") as fh:
+        fh.write("[10:05:00] [Server thread/INFO]: <Alex> dziesiąta sesja\n")
+    # Deliberately give `older` a newer mtime to verify filename ordering (10 > 2)
+    base_t = time.mktime((2026, 11, 20, 12, 0, 0, 0, 0, -1))
+    os.utime(newer, (base_t - 500, base_t - 500))
+    os.utime(older, (base_t - 10, base_t - 10))
+
+    inst.refresh_chat_history()
+    assert [(m["name"], m["text"]) for m in inst.chat] == [
+        ("Steve", "druga sesja"),
+        ("Alex", "dziesiąta sesja"),
+    ]
+
+
+def test_system_chat_emote_is_ignored_without_triggering_events():
+    inst, changed = _inst()
+    loop = asyncio.new_event_loop()
+    fut = loop.create_future()
+    inst._waiters.append((mgr.re.compile(r"Saved the game"), fut))
+    inst._parse_line("[12:00:00] [Server thread/INFO]: System chat: §e* Steve Saved the game")
+    assert not inst.chat
+    assert not fut.done()
+    assert changed == []
+    loop.close()
+
+
+def test_read_output_strips_ansi_before_prompt_and_clear_empty(tmp_path, monkeypatch):
+    monkeypatch.setattr(mgr, "SERVERS_DIR", tmp_path)
+    inst, _ = _inst()
+    inst.cfg = SimpleNamespace(id="srv")
+    inst.console = deque(maxlen=100)
+    inst._seq = 0
+    inst.broadcast = lambda msg: None
+
+    lines = [
+        b"\x1b[0m> \x1b[38:2:255:0:0m[12:00:00 INFO]: <Steve> kolor ansi\n",
+        b"\x1b[0m> \n",
+        b"",
+    ]
+
+    class FakeStdout:
+        def __init__(self, chunks):
+            self._chunks = list(chunks)
+
+        async def readline(self):
+            return self._chunks.pop(0) if self._chunks else b""
+
+    proc = SimpleNamespace(stdout=FakeStdout(lines))
+    asyncio.run(inst._read_output(proc))
+    assert [(m["name"], m["text"]) for m in inst.chat] == [("Steve", "kolor ansi")]
+
+    # Backup restore with no chat in logs clears stale messages when clear_empty=True
+    logs = tmp_path / "srv" / "logs"
+    logs.mkdir(parents=True)
+    latest = logs / "latest.log"
+    latest.write_text("[12:00:00] [Server thread/INFO]: Done (1.0s)!\n", encoding="utf-8")
+    inst.refresh_chat_history(force=True, clear_empty=True)
+    assert not inst.chat
+
+    # Offline / stopped instance still syncs new messages even when inst.chat is already non-empty
+    latest.write_text("[12:00:00 INFO]: <Steve> pierwsza\n", encoding="utf-8")
+    t = time.time()
+    os.utime(latest, (t, t))
+    inst.refresh_chat_history()
+    assert [(m["name"], m["text"]) for m in inst.chat] == [("Steve", "pierwsza")]
+
+    with latest.open("a", encoding="utf-8") as fh:
+        fh.write("[12:01:00 INFO]: System chat: <Alex> druga z logu\n")
+    os.utime(latest, (t + 1, t + 1))
+    inst.refresh_chat_history()
+    assert [(m["name"], m["text"]) for m in inst.chat] == [
+        ("Steve", "pierwsza"),
+        ("Alex", "druga z logu"),
+    ]
+
+
+def test_public_stats_syncs_new_log_messages_even_when_chat_is_non_empty(tmp_path, monkeypatch):
+    from app import api
+    from app.models import PublicPageSettings, WebMapSettings
+
+    monkeypatch.setattr(mgr, "SERVERS_DIR", tmp_path)
+    monkeypatch.setattr(api, "manager", SimpleNamespace(proxy=None), raising=False)
+    inst, _ = _inst()
+    inst.cfg = SimpleNamespace(
+        id="srv", name="S", subdomain="s", type="paper", mc_version="1.21.4",
+        loader_version="1.21.4", webmap=WebMapSettings(), public_page=PublicPageSettings(),
+    )
+    inst.dir  # property uses SERVERS_DIR / cfg.id
+    logs = tmp_path / "srv" / "logs"
+    logs.mkdir(parents=True)
+    latest = logs / "latest.log"
+    latest.write_text("[12:00:00] [Server thread/INFO]: <Steve> pierwsza\n", encoding="utf-8")
+    inst.state = "offline"
+    inst.started_at = None
+    inst.online = {}
+    inst.players_store = SimpleNamespace(data={"known": {}})
+    inst.props = lambda: {}
+    inst.address = lambda: "s.example.com"
+    inst.online_mode = True
+    inst.icon_version = lambda: 0
+    inst.refresh_chat_history()
+    assert len(inst.chat) == 1
+
+    with latest.open("a", encoding="utf-8") as fh:
+        fh.write("[12:01:00 INFO]: System chat: <Alex> druga tylko z logu\n")
+    t = time.time() + 1
+    os.utime(latest, (t, t))
+
+    stats = api._public_stats(inst)
+    assert [(m["name"], m["text"]) for m in stats["chat"]] == [
+        ("Steve", "pierwsza"),
+        ("Alex", "druga tylko z logu"),
+    ]

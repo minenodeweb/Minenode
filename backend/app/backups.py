@@ -313,6 +313,10 @@ class BackupManager:
                 shutil.rmtree(staging, ignore_errors=True)
                 raise
             inst.panel_log(f"Przywrócono kopię {bid}.")
+            refresh = getattr(inst, "refresh_chat_history", None)
+            if refresh:
+                with contextlib.suppress(Exception):
+                    refresh(force=True, clear_empty=True)
         finally:
             if tmp_zip:
                 tmp_zip.unlink(missing_ok=True)

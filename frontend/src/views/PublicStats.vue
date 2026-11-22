@@ -356,12 +356,15 @@ watchEffect(() => {
     document.title = 'MineNode'
   }
 })
+const onVisibilityChange = () => { if (document.visibilityState === 'visible') load() }
 onMounted(() => {
   load()
+  document.addEventListener('visibilitychange', onVisibilityChange)
   poll = setInterval(() => document.visibilityState === 'visible' && load(), REFRESH_MS)
   clock = setInterval(() => (now.value = Date.now() / 1000), 1000)
 })
 onUnmounted(() => {
+  document.removeEventListener('visibilitychange', onVisibilityChange)
   clearInterval(poll)
   clearInterval(clock)
   document.title = 'MineNode'

@@ -13,6 +13,7 @@ import shutil
 import signal
 import time
 import uuid
+import zlib
 from collections import deque
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Optional
@@ -45,8 +46,8 @@ def server_env(java: str | Path) -> dict[str, str]:
         env["PATH"] = os.pathsep.join([str(bin_dir), env.get("PATH", "")]).rstrip(os.pathsep)
         env["JAVA_HOME"] = str(bin_dir.parent)
     return env
-ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
-CTRL_RE = re.compile(r"\x1b\[[0-9;?]*[ABCDEFGHJKSTfhlnsu]|\x1b\][^\x07]*\x07|\r")
+ANSI_RE = re.compile(r"\x1b\[[0-9;:?]*[A-Za-z]")
+CTRL_RE = re.compile(r"\x1b\[[0-9;?]*[ABCDEFGHJKSTfhlnsu]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b\([A-Za-z0-9]|\r")
 NAME = r"([A-Za-z0-9_]{1,16})"
 # Newer servers (e.g. Purpur/Paper for 26.x) log broadcasts as "]: System chat: Steve joined the game".
 JOIN_RE = re.compile(rf"\]: (?:System chat: )?{NAME} joined the game")
@@ -61,10 +62,28 @@ CHAT_RE = re.compile(_FIRST + r"(?:\[Not Secure\] )?<([^<>]{1,40})>\s?(.*)$")
 EMOTE_RE = re.compile(_FIRST + r"(?:\[Not Secure\] )?\* [^\s<>]{1,40} ")  # /me
 LOG_TIME_RE = re.compile(r"^\[(\d{2}):(\d{2}):(\d{2})\]")
 CHAT_BUFFER = 50
-# How many rotated logs are searched when latest.log does not have enough chat.
-CHAT_LOG_FILES = 12
-ROTATED_LOG_RE = re.compile(r"^\d{4}-\d{2}-\d{2}-\d+\.log(?:\.gz)?$", re.I)
-MC_CODE_RE = re.compile(r"§[0-9A-FK-ORa-fk-or]")
+# Upper bound for rotated logs scanned backwards until CHAT_BUFFER messages are found.
+CHAT_LOG_FILES = 200
+ROTATED_LOG_RE = re.compile(r"^(\d{4})-(\d{2})-(\d{2})-(\d+)\.log(?:\.gz)?$", re.I)
+MC_CODE_RE = re.compile(r"§(?:#[0-9A-Fa-f]{6}|[Xx](?:§[0-9A-Fa-f]){6}|[0-9A-FK-ORXa-fk-orx])")
+_NON_INFO_HEADER = re.compile(r"(?:^|[/\s\[])(?:WARN(?:ING)?|ERROR|FATAL|SEVERE|DEBUG|TRACE)\](?:\s|$)", re.I)
+_CHAT_THREAD_RE = re.compile(r"Async Chat Thread", re.I)
+_CHAT_WRAPPER_RE = re.compile(r"^(?:\[Not Secure\]\s*|System chat:\s*|\[System\]\s*|\[CHAT\]\s*)+", re.I)
+_TAG_PREFIX_RE = re.compile(r"^(?:\[(?!Server\]|Rcon\])(?![^\]]*: )[^\]]{1,64}\]\s*)+")
+_ANGLE_CHAT_RE = re.compile(r"^<((?:<[^<>]{1,24}>\s*|\[[^\]]{1,24}\]\s*)*[^<>]{1,64})>\s?(.*)$")
+_INNER_NAME_TAG_RE = re.compile(r"^(?:<[^<>]{1,24}>\s*|\[[^\]]{1,24}\]\s*)+")
+_SEP_CHAT_RE = re.compile(r"^([.]?[A-Za-z0-9_]{1,16}(?: [A-Za-z0-9_]{1,16})?)\s*([:»›>])\s+(.+)$")
+_EMOTE_BODY_RE = re.compile(r"^\* [^\s<>]{1,40} ")
+_MONTHS = {
+    "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
+    "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
+}
+_ISO_LOG_TIME_RE = re.compile(r"^\[?(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:\s+[^\]]+)?\]?")
+_FORGE_LOG_TIME_RE = re.compile(
+    r"^\[(\d{1,2})[- ]?(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[- ]?(\d{4})\s+(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:\s+[^\]]+)?\]",
+    re.I,
+)
+_CLOCK_LOG_TIME_RE = re.compile(r"^\[(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:\s+[^\]]+)?\]")
 LOST_RE = re.compile(rf"\]: {NAME} lost connection:")
 UUID_RE = re.compile(rf"UUID of player {NAME} is ([0-9a-fA-F-]{{32,36}})")
 DONE_RE = re.compile(r"Done \([\d.,]+s\)!")
@@ -75,6 +94,107 @@ WHITELIST_DENY_RES = [
     re.compile(rf"{NAME} \(/[^)]*\) lost connection: You are not white-?listed", re.I),
     re.compile(rf"{NAME} lost connection: You are not white-?listed", re.I),
 ]
+
+
+def _clean_log_line(raw_line: str) -> str:
+    """Strip terminal escapes, carriage returns, BOM, Minecraft section codes and prompts."""
+    text = CTRL_RE.sub("", raw_line.rstrip("\n"))
+    text = ANSI_RE.sub("", text).lstrip("\ufeff")
+    text = MC_CODE_RE.sub("", text)
+    while text.startswith("> "):
+        text = text[2:]
+    return text
+
+
+def _split_log_line(plain: str) -> tuple[str, str] | None:
+    """Split a log line at the first ']: ' into (header, body), skipping non-INFO log levels."""
+    cleaned = _clean_log_line(plain).lstrip()
+    sep = cleaned.find("]: ")
+    if sep == -1:
+        return None
+    header = cleaned[: sep + 1]
+    if _NON_INFO_HEADER.search(header):
+        return None
+    return header, cleaned[sep + 3 :]
+
+
+def _parse_chat_line(plain: str, known_names: set[str] | None = None) -> tuple[str, str] | None:
+    """Extract (player_name, message_text) from vanilla, modded, System chat or plugin chat lines."""
+    parts = _split_log_line(plain)
+    if not parts:
+        return None
+    header, body = parts
+    rest = _CHAT_WRAPPER_RE.sub("", body)
+    rest = _TAG_PREFIX_RE.sub("", rest)
+    rest = _CHAT_WRAPPER_RE.sub("", rest)
+    if m := _ANGLE_CHAT_RE.match(rest):
+        raw_name = m.group(1).strip()
+        text = m.group(2).strip()
+        if not raw_name or not text or raw_name.startswith("/") or "=" in raw_name or '"' in raw_name:
+            return None
+        name = _INNER_NAME_TAG_RE.sub("", raw_name).strip() or raw_name
+        return name[:40], text[:500]
+    if m := _SEP_CHAT_RE.match(rest):
+        name = m.group(1).strip()
+        text = m.group(3).strip()
+        if not name or not text:
+            return None
+        if _CHAT_THREAD_RE.search(header) or (known_names is not None and name.lower() in known_names):
+            return name[:40], text[:500]
+    return None
+
+
+def _is_emote_line(plain: str) -> bool:
+    parts = _split_log_line(plain)
+    if not parts:
+        return False
+    rest = _CHAT_WRAPPER_RE.sub("", parts[1])
+    return bool(_EMOTE_BODY_RE.match(rest))
+
+
+def _parse_log_timestamp(path: Path, plain: str, mtime: float) -> float:
+    """Parse log line timestamp across Paper, Vanilla, Fabric, Forge/NeoForge and ISO formats."""
+    cleaned = _clean_log_line(plain).lstrip()
+    if m := _ISO_LOG_TIME_RE.match(cleaned):
+        try:
+            return datetime.datetime(
+                int(m.group(1)), int(m.group(2)), int(m.group(3)),
+                int(m.group(4)), int(m.group(5)), int(m.group(6)),
+            ).timestamp()
+        except ValueError:
+            return mtime
+    if m := _FORGE_LOG_TIME_RE.match(cleaned):
+        mon = _MONTHS.get(m.group(2).lower())
+        if mon:
+            try:
+                return datetime.datetime(
+                    int(m.group(3)), mon, int(m.group(1)),
+                    int(m.group(4)), int(m.group(5)), int(m.group(6)),
+                ).timestamp()
+            except ValueError:
+                return mtime
+    if m := _CLOCK_LOG_TIME_RE.match(cleaned):
+        h, minute, sec = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        named = re.match(r"^(\d{4})-(\d{2})-(\d{2})-", path.name)
+        day = datetime.datetime(int(named.group(1)), int(named.group(2)), int(named.group(3))) if named \
+            else datetime.datetime.fromtimestamp(mtime)
+        try:
+            at = day.replace(hour=h, minute=minute, second=sec, microsecond=0).timestamp()
+        except ValueError:
+            return mtime
+        if not named and at > mtime + 60:
+            at -= 86400
+        return at
+    return mtime
+
+
+def _extract_log_known(plain: str, names: set[str]) -> None:
+    """Remember player names seen in join/login/UUID log lines while scanning history."""
+    cleaned = _clean_log_line(plain)
+    for pat in (UUID_RE, LOGIN_RE, JOIN_RE):
+        if m := pat.search(cleaned):
+            names.add(m.group(1).lower())
+            return
 
 # https://aikar.co/2018/07/02/tuning-the-jvm-g1gc-garbage-collector-flags-for-minecraft/ (mcflags.emc.gs).
 # Aikar's rules: the same -Xms and -Xmx, and the >12 GB variant of the young-generation settings.
@@ -142,6 +262,11 @@ class ServerInstance:
         self._chunky = None
         self._proxy_players: dict[str, list] = {}  # lowercase name -> [name, open connections, since]
         self._chat_log_sig: tuple | None = None
+        self._chat_rot_sig: tuple | None = None
+        self._chat_history_loaded = False
+        self._chat_latest_state: dict | None = None
+        self._chat_rot_cache: dict[str, tuple[tuple, list[tuple[float, str, str]]]] = {}
+        self._chat_pending_live: deque[tuple[float, str, str]] = deque(maxlen=CHAT_BUFFER * 2)
         self._load_log_history()
 
     def _load_log_history(self) -> None:
@@ -156,102 +281,281 @@ class ServerInstance:
                 self._append("— powyżej: historia z logs/latest.log —", "panel")
         except OSError:
             pass
-        self.refresh_chat_history(force=True)
         with contextlib.suppress(Exception):  # startup must not fail on a half-written stats file
             playerstats.sync_known(self)
+        self.refresh_chat_history(force=True)
+
+    def _is_running_safe(self) -> bool:
+        proc = getattr(self, "proc", None)
+        return proc is not None and proc.returncode is None
+
+    def _known_player_names(self) -> set[str]:
+        names = {str(n).lower() for n in (getattr(self, "online", None) or {})}
+        store = getattr(self, "players_store", None)
+        if store is not None:
+            known = store.data.get("known") or {}
+            names.update(str(k).lower() for k in known)
+            names.update(
+                str(v.get("name", "")).lower()
+                for v in known.values()
+                if isinstance(v, dict) and v.get("name")
+            )
+        names.discard("")
+        return names
 
     @staticmethod
-    def _chat_entry(path: Path, plain: str, mtime: float) -> tuple[float, str, str] | None:
-        """One chat message from a log line, or None for anything else.
-
-        Log lines carry only the time of day, so the date has to come from the file. Rotated logs
-        have the date in their name (``2026-11-19-3.log``) – that is exact; for ``latest.log``
-        the file's last write time is the best available guess (a message later than the file's
-        mtime belongs to the previous day)."""
-        m = CHAT_RE.search(plain)
-        t = LOG_TIME_RE.match(plain)
-        if not m or not t:
+    def _chat_entry(
+        path: Path, plain: str, mtime: float, known_names: set[str] | None = None
+    ) -> tuple[float, str, str] | None:
+        """One chat message from a log line, or None for anything else."""
+        parsed = _parse_chat_line(plain, known_names)
+        if not parsed:
             return None
-        named = re.match(r"^(\d{4})-(\d{2})-(\d{2})-", path.name)
-        if named:
-            day = datetime.datetime(int(named.group(1)), int(named.group(2)), int(named.group(3)))
-        else:
-            day = datetime.datetime.fromtimestamp(mtime)
-        at = day.replace(hour=int(t.group(1)), minute=int(t.group(2)), second=int(t.group(3)), microsecond=0).timestamp()
-        if not named and at > mtime + 60:
-            at -= 86400
-        return at, m.group(1), m.group(2)
+        at = _parse_log_timestamp(path, plain, mtime)
+        return at, parsed[0], parsed[1]
 
-    def _chat_log_files(self) -> list[tuple[Path, float, int]]:
+    def _chat_log_files(self) -> list[tuple[Path, os.stat_result]]:
         """Logs that may contain player chat, newest first; latest.log always comes first."""
+        rotated: list[tuple[tuple[int, int, int, int, int], Path, os.stat_result]] = []
+        latest_item: tuple[Path, os.stat_result] | None = None
         try:
-            files = []
             for path in (self.dir / "logs").iterdir():
-                if path.name != "latest.log" and not ROTATED_LOG_RE.match(path.name):
-                    continue
                 try:
                     st = path.stat()
                 except OSError:
                     continue
-                files.append((path, st.st_mtime, st.st_size))
+                if path.name == "latest.log":
+                    latest_item = (path, st)
+                elif m := ROTATED_LOG_RE.match(path.name):
+                    order = (int(m.group(1)), int(m.group(2)), int(m.group(3)), int(m.group(4)), st.st_mtime_ns)
+                    rotated.append((order, path, st))
         except OSError:
             return []
-        files.sort(key=lambda item: item[1], reverse=True)
-        latest = next((item for item in files if item[0].name == "latest.log"), None)
-        if latest:
-            files.remove(latest)
-            files.insert(0, latest)
+        rotated.sort(key=lambda item: item[0], reverse=True)
+        files = [(path, st) for _, path, st in rotated]
+        if latest_item:
+            files.insert(0, latest_item)
         return files[: CHAT_LOG_FILES + 1]
 
     @classmethod
-    def _chat_log_entries(cls, path: Path, mtime: float) -> list[tuple[float, str, str]]:
+    def _chat_log_entries(
+        cls, path: Path, mtime: float, known_names: set[str] | None = None
+    ) -> list[tuple[float, str, str]]:
         """The last chat messages in one log file."""
         entries: deque[tuple[float, str, str]] = deque(maxlen=CHAT_BUFFER)
+        names = set(known_names) if known_names else set()
         opener = gzip.open if path.name.lower().endswith(".gz") else open
         try:
             with opener(path, "rb") as fh:
                 for raw in fh:
-                    entry = cls._chat_entry(path, ANSI_RE.sub("", raw.decode("utf-8", "replace")), mtime)
+                    text = raw.decode("utf-8", "replace")
+                    entry = cls._chat_entry(path, text, mtime, names)
                     if entry:
                         entries.append(entry)
-        except (OSError, EOFError):
+                    else:
+                        _extract_log_known(text, names)
+        except (OSError, EOFError, zlib.error):
             return []
         return list(entries)
 
-    def refresh_chat_history(self, force: bool = False) -> None:
-        """Load the last chat messages from the logs, so the public page shows them while offline.
+    def _scan_rotated_chat(
+        self, path: Path, st: os.stat_result, known_names: set[str]
+    ) -> list[tuple[float, str, str]]:
+        cache = getattr(self, "_chat_rot_cache", None)
+        if cache is None:
+            cache = {}
+            self._chat_rot_cache = cache
+        sig = (st.st_dev, st.st_ino, st.st_mtime_ns, st.st_size)
+        cached = cache.get(str(path))
+        if cached and cached[0] == sig:
+            return cached[1]
+        entries = self._chat_log_entries(path, st.st_mtime, known_names)
+        cache[str(path)] = (sig, entries)
+        return entries
 
-        The current log is read in full instead of only the console tail: on a busy server the latest
-        conversation can be thousands of lines above the end. Rotated logs are only a fallback when
-        latest.log has no (or too little) chat."""
-        files = self._chat_log_files()
-        signature = tuple((str(path), mtime, size) for path, mtime, size in files)
-        # Only trust the cache when it actually produced messages. An empty buffer with an
-        # unchanged signature must be retried: the log may have appeared/written after startup
-        # (or the first read happened before any player spoke).
-        if not force and signature == getattr(self, "_chat_log_sig", None) and self.chat:
-            return
-        self._chat_log_sig = signature
-        entries: list[tuple[float, str, str]] = []
-        for path, mtime, _size in files:
-            file_entries = self._chat_log_entries(path, mtime)
-            if not file_entries:
-                continue
-            entries = file_entries + entries
-            if len(entries) >= CHAT_BUFFER:
-                entries = entries[-CHAT_BUFFER:]
-                break
-        if not entries:
-            return
+    def _scan_latest_chat(
+        self, path: Path, st: os.stat_result, known_names: set[str], is_running: bool
+    ) -> tuple[list[tuple[float, str, str]], list[tuple[float, str, str]], bool]:
+        """Read latest.log incrementally when appended to; reset cleanly on rotation/overwrite."""
+        state = getattr(self, "_chat_latest_state", None)
+        inode = (st.st_dev, st.st_ino)
+        if state and (state["inode"], state["size"], state["mtime_ns"]) == (inode, st.st_size, st.st_mtime_ns):
+            return list(state["entries"]), [], False
+        try:
+            with path.open("rb") as fh:
+                same_file = bool(state and state["inode"] == inode and st.st_size >= state["offset"])
+                if same_file and state["head"]:
+                    same_file = fh.read(len(state["head"])) == state["head"]
+                if same_file:
+                    entries: deque[tuple[float, str, str]] = state["entries"]
+                    file_known: set[str] = state["file_known"] | known_names
+                    offset: int = state["offset"]
+                    head: bytes = state["head"]
+                    was_reset = False
+                    fh.seek(offset)
+                else:
+                    fh.seek(0)
+                    head = fh.read(64)
+                    fh.seek(0)
+                    entries = deque(maxlen=CHAT_BUFFER)
+                    file_known = set(known_names)
+                    offset = 0
+                    was_reset = True
+                new_entries: list[tuple[float, str, str]] = []
+                while True:
+                    raw = fh.readline()
+                    if not raw:
+                        break
+                    if is_running and not raw.endswith(b"\n"):
+                        break
+                    offset = fh.tell()
+                    text = raw.decode("utf-8", "replace")
+                    entry = self._chat_entry(path, text, st.st_mtime, file_known)
+                    if entry:
+                        entries.append(entry)
+                        new_entries.append(entry)
+                    else:
+                        _extract_log_known(text, file_known)
+                if len(head) < 64 and offset > 0:
+                    fh.seek(0)
+                    head = fh.read(64)
+        except OSError:
+            return [], [], False
+        self._chat_latest_state = {
+            "inode": inode,
+            "head": head,
+            "offset": offset,
+            "size": st.st_size,
+            "mtime_ns": st.st_mtime_ns,
+            "entries": entries,
+            "file_known": file_known,
+        }
+        return list(entries), new_entries, was_reset
+
+    def _consume_pending_live(self, name: str, text: str, at: float) -> bool:
+        pending = getattr(self, "_chat_pending_live", None)
+        if not pending:
+            return False
+        cutoff = time.time() - 120
+        while pending and pending[0][0] < cutoff:
+            pending.popleft()
+        for idx, (live_t, live_name, live_text) in enumerate(pending):
+            if live_name == name and live_text == text and abs(live_t - at) <= 30:
+                del pending[idx]
+                return True
+        return False
+
+    def _reconcile_pending_live(self, entries: list[tuple[float, str, str]]) -> list[tuple[float, str, str]]:
+        """Drop live entries already present in logs and keep unflushed recent live lines."""
+        pending = getattr(self, "_chat_pending_live", None)
+        if not pending:
+            return entries
+        now = time.time()
+        cutoff = now - 120
+        while pending and pending[0][0] < cutoff:
+            pending.popleft()
+        matched: set[int] = set()
+        unmatched: deque[tuple[float, str, str]] = deque(maxlen=CHAT_BUFFER * 2)
+        extras: list[tuple[float, str, str]] = []
+        for live_t, live_name, live_text in pending:
+            hit = next(
+                (
+                    i for i, (at, d_name, d_text) in enumerate(entries)
+                    if i not in matched and d_name == live_name and d_text == live_text and abs(live_t - at) <= 30
+                ),
+                None,
+            )
+            if hit is not None:
+                matched.add(hit)
+            elif live_t >= now - 15:
+                unmatched.append((live_t, live_name, live_text))
+                extras.append((live_t, live_name, live_text))
+        self._chat_pending_live = unmatched
+        return (entries + extras)[-CHAT_BUFFER:] if extras else entries
+
+    def _apply_chat_entries(self, entries: list[tuple[float, str, str]]) -> None:
+        """Update self.chat cleanly, preserving existing sequence numbers when appending/sliding."""
+        old = list(self.chat)
+        if old:
+            matches = lambda item, entry: item["name"] == entry[1] and item["text"] == entry[2] and abs(item["t"] - entry[0]) <= 30
+            if len(entries) >= len(old) and all(matches(old[i], entries[i]) for i in range(len(old))):
+                for at, name, text in entries[len(old):]:
+                    self._add_chat(name, text, at, live=False)
+                return
+            if len(old) == CHAT_BUFFER and len(entries) == CHAT_BUFFER:
+                for start in range(1, CHAT_BUFFER):
+                    overlap = CHAT_BUFFER - start
+                    if all(matches(old[start + i], entries[i]) for i in range(overlap)):
+                        for at, name, text in entries[overlap:]:
+                            self._add_chat(name, text, at, live=False)
+                        return
         self.chat.clear()
         for at, name, text in entries[-CHAT_BUFFER:]:
-            self._add_chat(name, text, at)
+            self._add_chat(name, text, at, live=False)
+
+    def refresh_chat_history(self, force: bool = False, clear_empty: bool = False) -> None:
+        """Load and incrementally sync chat messages from server logs.
+
+        Keeps latest.log read incrementally while running, fills older slots from cached rotated
+        logs backwards until CHAT_BUFFER messages are collected, and avoids duplicating live lines."""
+        is_running = self._is_running_safe()
+        files = self._chat_log_files()
+        signature = tuple((str(p), st.st_dev, st.st_ino, st.st_mtime_ns, st.st_size) for p, st in files)
+        rot_cache = getattr(self, "_chat_rot_cache", None)
+        if rot_cache:
+            alive = {str(p) for p, _ in files if p.name != "latest.log"}
+            for stale in [k for k in rot_cache if k not in alive]:
+                rot_cache.pop(stale, None)
+        if not force and getattr(self, "_chat_history_loaded", False) and signature == getattr(self, "_chat_log_sig", None):
+            return
+        latest_item = files[0] if files and files[0][0].name == "latest.log" else None
+        rotated_files = files[1:] if latest_item else files
+        rotated_sig = tuple((str(p), st.st_dev, st.st_ino, st.st_mtime_ns, st.st_size) for p, st in rotated_files)
+        prev_rot_sig = getattr(self, "_chat_rot_sig", None)
+        known = self._known_player_names()
+        if latest_item:
+            latest_entries, new_latest, latest_reset = self._scan_latest_chat(
+                latest_item[0], latest_item[1], known, is_running
+            )
+        else:
+            latest_entries, new_latest, latest_reset = [], [], True
+            self._chat_latest_state = None
+        if (
+            not force
+            and getattr(self, "_chat_history_loaded", False)
+            and not latest_reset
+            and rotated_sig == prev_rot_sig
+            and self.chat
+        ):
+            self._chat_log_sig = signature
+            for at, name, text in new_latest:
+                if not self._consume_pending_live(name, text, at):
+                    self._add_chat(name, text, at, live=False)
+            return
+        entries = list(latest_entries)
+        for path, st in rotated_files:
+            if len(entries) >= CHAT_BUFFER:
+                break
+            file_entries = self._scan_rotated_chat(path, st, known)
+            if file_entries:
+                entries = file_entries + entries
+        entries = entries[-CHAT_BUFFER:]
+        if is_running:
+            entries = self._reconcile_pending_live(entries)
+        self._chat_log_sig = signature
+        self._chat_rot_sig = rotated_sig
+        self._chat_history_loaded = True
+        if not entries:
+            if clear_empty and not is_running:
+                self.chat.clear()
+            return
+        self._apply_chat_entries(entries)
 
     # ------------------------------------------------------------ helpers
     @property
     def map_render(self):
         """Full web-map renders started from the panel (webmap.MapRender)."""
-        if self._map_render is None:
+        if getattr(self, "_map_render", None) is None:
             from .webmap import MapRender
             self._map_render = MapRender(self)
         return self._map_render
@@ -259,7 +563,7 @@ class ServerInstance:
     @property
     def chunky_runner(self):
         """World pre-generation with Chunky (chunky.ChunkyRunner)."""
-        if self._chunky is None:
+        if getattr(self, "_chunky", None) is None:
             from .chunky import ChunkyRunner
             self._chunky = ChunkyRunner(self)
         return self._chunky
@@ -706,19 +1010,22 @@ class ServerInstance:
             line = CTRL_RE.sub("", raw.decode("utf-8", "replace").rstrip("\n"))
             while line.startswith("> "):
                 line = line[2:]
-            if not line.strip() or line.strip() == ">":
+            plain = ANSI_RE.sub("", line).lstrip("\ufeff")
+            while plain.startswith("> "):
+                plain = plain[2:]
+            if not plain.strip() or plain.strip() == ">":
                 continue
             self._append(line, "out")
-            self._parse_line(ANSI_RE.sub("", line))
+            self._parse_line(plain)
 
     def _parse_line(self, plain: str) -> None:
         # Text a player typed must never be read as a server event: a chat line saying
         # "There are 9 of a max of 20 players online: …" or "Saved the game" would otherwise
         # change the player list, finish a backup's save wait or confuse map/Chunky progress.
-        if m := CHAT_RE.search(plain):
-            self._add_chat(m.group(1), m.group(2))
+        if chat := _parse_chat_line(plain, self._known_player_names()):
+            self._add_chat(chat[0], chat[1], live=True)
             return
-        if EMOTE_RE.search(plain):
+        if _is_emote_line(plain):
             return
         for pattern, fut in list(self._waiters):
             if not fut.done() and pattern.search(plain):
@@ -758,16 +1065,23 @@ class ServerInstance:
                     break
         elif "Task " in plain or "No tasks" in plain:
             self.chunky_runner.on_line(plain)
-        elif self._map_render is not None and (self._map_render.running or "render" in plain):
-            self._map_render.on_line(plain)
+        elif (mr := getattr(self, "_map_render", None)) is not None and (mr.running or "render" in plain):
+            mr.on_line(plain)
 
-    def _add_chat(self, name: str, text: str, at: float | None = None) -> None:
-        name = MC_CODE_RE.sub("", name).strip()
-        text = MC_CODE_RE.sub("", text).strip()
+    def _add_chat(self, name: str, text: str, at: float | None = None, *, live: bool = False) -> None:
+        name = MC_CODE_RE.sub("", name).strip()[:40]
+        text = MC_CODE_RE.sub("", text).strip()[:500]
         if not name or not text:
             return
+        ts = at if at is not None else time.time()
         self._chat_seq += 1
-        self.chat.append({"seq": self._chat_seq, "t": at or time.time(), "name": name[:40], "text": text[:500]})
+        self.chat.append({"seq": self._chat_seq, "t": ts, "name": name, "text": text})
+        if live:
+            pending = getattr(self, "_chat_pending_live", None)
+            if pending is None:
+                pending = deque(maxlen=CHAT_BUFFER * 2)
+                self._chat_pending_live = pending
+            pending.append((ts, name, text))
 
     def _is_online(self, name: str) -> bool:
         key = name.lower()
@@ -884,6 +1198,8 @@ class ServerInstance:
         with contextlib.suppress(Exception):
             await asyncio.wait_for(reader, 5)
         self.exit_code = code
+        with contextlib.suppress(Exception):
+            self.refresh_chat_history()
         if self._map_render is not None:
             self._map_render.on_stop()
         if self._chunky is not None:

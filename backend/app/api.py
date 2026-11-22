@@ -1892,10 +1892,9 @@ def _public_max_players(inst: ServerInstance) -> int:
 
 def _public_stats(inst: ServerInstance) -> dict:
     props = inst.props()
-    # The panel may have started before the server wrote its logs (or the log appeared later):
-    # read the last conversation lazily so the public page still shows chat even while the server
-    # is running (refresh_chat_history clears and rebuilds the buffer, so no message is duplicated).
-    if not getattr(inst, "chat", None):
+    page = getattr(inst.cfg, "public_page", None) or PublicPageSettings()
+    # Keep chat synced with server logs (incrementally while running, full fallback on start/rotation).
+    if page.chat:
         refresh = getattr(inst, "refresh_chat_history", None)
         if refresh:
             refresh()
@@ -1918,7 +1917,6 @@ def _public_stats(inst: ServerInstance) -> dict:
     ]
     offline.sort(key=lambda p: p["last_seen"], reverse=True)
     map_ready = webmap.map_available(inst)
-    page = getattr(inst.cfg, "public_page", None) or PublicPageSettings()
     return {
         "server": {
             "id": inst.cfg.id, "name": inst.cfg.name, "subdomain": inst.cfg.subdomain,
