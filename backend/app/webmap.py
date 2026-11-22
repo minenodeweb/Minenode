@@ -16,6 +16,7 @@ counts, web chat off (a public page must not let visitors write into the game ch
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import re
 import time
@@ -227,11 +228,14 @@ def bluemap_write_config(inst: "ServerInstance", accept: Optional[bool] = None) 
     }, header=('# MineNode: accept-download is set by the panel when BlueMap is enabled.\n'
                'data: "bluemap"\nrender-thread-count: 1\nscan-for-mod-resources: true\nmetrics: false\n'))
     changed |= _edit(d / "webserver.conf", {
-        "enabled": "true", "webroot": f'"{BLUEMAP_WEBROOT}"', "ip": '"127.0.0.1"', "port": str(wm.port or 8100),
-    }, header="sse-enabled: true\n")
+        "enabled": "true", "webroot": f'"{BLUEMAP_WEBROOT}"', "ip": '"127.0.0.1"',
+        "port": str(wm.port or 8100), "max-connection-count": "500",
+    }, header="max-connection-count: 500\nsse-enabled: true\n")
     changed |= _edit(d / "webapp.conf", {
         "enabled": "true", "webroot": f'"{BLUEMAP_WEBROOT}"',
         "default-to-flat-view": "false" if wm.render_3d else "true",
+        "hires-slider-max": "1000", "hires-slider-default": "500",
+        "lowres-slider-max": "10000", "lowres-slider-default": "4000",
     }, header="update-settings-file: true\nuse-cookies: true\n")
     changed |= _edit(d / "plugin.conf", {"live-player-markers": "true" if wm.show_players else "false"},
                      header='hidden-game-modes: [\n  "spectator"\n]\nhide-vanished: true\nhide-invisible: true\nplayer-render-limit: -1\n')
@@ -258,7 +262,33 @@ def bluemap_write_config(inst: "ServerInstance", accept: Optional[bool] = None) 
             (d / _BLUEMAP_FORCE_UPDATE_MARKER).write_text("1", encoding="utf-8")
         except OSError:
             pass
+    _sync_bluemap_web_settings(inst)
     return changed
+
+
+def _sync_bluemap_web_settings(inst: "ServerInstance") -> None:
+    """Keep BlueMap's generated webapp settings.json aligned even before a full BlueMap reload."""
+    web_settings = inst.dir / BLUEMAP_WEBROOT / "settings.json"
+    if not web_settings.is_file():
+        return
+    try:
+        data = json.loads(web_settings.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return
+    if not isinstance(data, dict):
+        return
+    updated = dict(data)
+    updated["defaultToFlatView"] = not inst.cfg.webmap.render_3d
+    updated["hiresSliderMax"] = max(int(updated.get("hiresSliderMax") or 0), 1000)
+    updated["hiresSliderDefault"] = 500
+    updated["lowresSliderMax"] = max(int(updated.get("lowresSliderMax") or 0), 10000)
+    updated["lowresSliderDefault"] = 4000
+    if updated == data:
+        return
+    try:
+        atomic_write_text(web_settings, json.dumps(updated, indent=2))
+    except OSError:
+        pass
 
 
 def _accepted(d: Path) -> bool:
@@ -450,6 +480,9 @@ async def on_online(inst: "ServerInstance") -> None:
             if reloaded:
                 await asyncio.sleep(3)
             _start_bluemap_full_render(inst)
+            return
+        if _accepted(bluemap_dir(inst)) and hasattr(inst, "map_render"):
+            inst.map_render.watch_bluemap()
             return
 
 
@@ -678,6 +711,33 @@ class MapRender:
         self.current = None
         inst.panel_log("Renderowanie mapy przerwane.")
 
+    def watch_bluemap(self) -> None:
+        """Start tracking an automatic/startup BlueMap render without sending a render command."""
+        if (
+            self.running
+            or self.inst.state != "online"
+            or not self.inst.cfg.webmap.enabled
+            or provider(self.inst) != "bluemap"
+        ):
+            return
+        maps = _bluemap_maps(self.inst)
+        if not maps:
+            return
+        self.provider = "bluemap"
+        self.mode = "update"
+        self.requested_at = None
+        self.total_worlds = len(maps)
+        self.finished_worlds = 0
+        self.unit = None
+        self.bluemap_active = True
+        self._bluemap_idle = 0
+        self._bluemap_seen = False
+        self._bluemap_next = time.time() + BLUEMAP_FIRST_POLL
+
+    def _refresh_idle(self) -> None:
+        if not getattr(self.inst, "online", None) and getattr(self.inst, "empty_since", None) is not None:
+            self.inst.empty_since = time.time()
+
     def _next(self, now: float) -> None:
         if not self.queue:
             self.current, self.awaiting = None, None
@@ -685,6 +745,7 @@ class MapRender:
             self.world_percent = 100.0
             self.percent = 100.0
             self.rate = self.eta = None
+            self._refresh_idle()
             if self.requested_at and not self.finished_at:
                 self.finished_at = now
                 self.inst.panel_log("Mapa została wyrenderowana.")
@@ -700,16 +761,31 @@ class MapRender:
         self._send(f"{label} fullrender {world}")
 
     def on_line(self, plain: str) -> None:
-        pid = self.provider
+        wm = getattr(getattr(self.inst, "cfg", None), "webmap", None)
+        pid = self.provider or (wm.provider if wm and wm.enabled else None)
         if not pid:
             return
         plain = _MC_CODE.sub("", plain)
         if pid == "bluemap":
+            if not self.bluemap_active and (
+                _BLUEMAP_MAP.search(plain) or _BLUEMAP_PROGRESS.search(plain)
+            ):
+                self.provider = "bluemap"
+                self.mode = "update"
+                self.total_worlds = max(self.total_worlds, len(_bluemap_maps(self.inst)) or 1)
+                self.bluemap_active = True
+                self._bluemap_idle = 0
+                self._bluemap_seen = False
+                self._bluemap_next = time.time() + BLUEMAP_FIRST_POLL
             self._on_bluemap_line(plain)
             return
-        if pid not in _LOG or not (self.current or self.awaiting):
+        if pid not in _LOG:
             return
         if pid == "squaremap" and (m := _SQUAREMAP_PROGRESS.search(plain)):
+            if not (self.current or self.awaiting):
+                self.provider = pid
+                self.total_worlds = max(self.total_worlds, 1)
+                self.unit = "chunks"
             world = squaremap._world_id(m.group("world"))
             self.current, self.awaiting = world, None
             self.world_percent = _as_float(m.group("percent"))
@@ -721,6 +797,10 @@ class MapRender:
             self._sync_percent()
             return
         if pid == "dynmap" and (m := _DYNMAP_PROGRESS.search(plain)):
+            if not (self.current or self.awaiting):
+                self.provider = pid
+                self.total_worlds = max(self.total_worlds, 1)
+                self.unit = "tiles"
             self.current, self.awaiting = m.group("world").strip(), None
             self.processed = _as_int(m.group("count"))
             try:
@@ -736,6 +816,12 @@ class MapRender:
             if pid == "squaremap":
                 world = squaremap._world_id(world)
             if kind == "started":
+                if not self.provider:
+                    self.provider = pid
+                if not self.total_worlds:
+                    self.total_worlds = 1
+                if not self.unit:
+                    self.unit = "chunks" if pid == "squaremap" else "tiles"
                 if self.current != world:
                     self.processed = self.processed_total = None
                     self.rate = self.eta = self.elapsed = None
@@ -760,6 +846,9 @@ class MapRender:
                 self.world_percent = _as_float(m.group("percent"))
             except ValueError:
                 return
+            if self.requested_at is None:
+                self.requested_at = time.time()
+                self.finished_at = None
             self._bluemap_idle = 0
             self._bluemap_seen = True
             self._sync_percent()
@@ -769,6 +858,9 @@ class MapRender:
             return
         if m := _BLUEMAP_MAP.search(plain):
             world = m.group("map").strip().strip("'\"")
+            if self.requested_at is None:
+                self.requested_at = time.time()
+                self.finished_at = None
             self._bluemap_idle = 0
             self._bluemap_seen = True
             if self.current and world != self.current:
@@ -807,6 +899,7 @@ class MapRender:
         self.paused = False
         self._bluemap_idle = 0
         self._bluemap_seen = False
+        self._refresh_idle()
         if self.requested_at and not self.finished_at:
             self.finished_at = now or time.time()
             self.inst.panel_log("Mapa została zaktualizowana." if self.mode == "update"

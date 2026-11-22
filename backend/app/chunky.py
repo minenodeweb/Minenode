@@ -374,6 +374,8 @@ class ChunkyRunner:
             elif kind_ == "finished":
                 self.running = self.auto_paused = False
                 self._pending = None
+                if not getattr(self.inst, "online", None) and getattr(self.inst, "empty_since", None) is not None:
+                    self.inst.empty_since = time.time()
                 if t:
                     t.update(active=False, user_paused=False, percent=100.0, eta=None,
                              processed=int(m.group(2).replace(",", "")), duration=m.group(4), finished_at=time.time())

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import gzip
 import logging
 import os
 import platform
@@ -2053,17 +2054,129 @@ async def public_server_icon(sid: str):
 
 
 _PROXY_HEADERS = ("content-type", "content-encoding", "cache-control", "etag", "last-modified", "expires", "x-accel-buffering")
+_BLUEMAP_TILE_RE = re.compile(r"^maps/[^/]+/tiles/(\d+)/x-?[\d/]+z-?[\d/]+\.(prbm|png)(\.gz)?$")
+_BLUEMAP_BOOST_SCRIPT = """<script>
+(function(){
+  try {
+    if (!localStorage.getItem("minenode-bm-hires-v1")) {
+      var h = Number(JSON.parse(localStorage.getItem("bluemap-hiresViewDistance") || "0"));
+      if (!h || h <= 200) localStorage.setItem("bluemap-hiresViewDistance", "500");
+      var l = Number(JSON.parse(localStorage.getItem("bluemap-lowresViewDistance") || "0"));
+      if (!l || l <= 2000) localStorage.setItem("bluemap-lowresViewDistance", "4000");
+      localStorage.setItem("minenode-bm-hires-v1", "1");
+    }
+  } catch (e) {}
+  var tries = 0;
+  var hook = setInterval(function(){
+    tries++;
+    var bm = window.bluemap;
+    if (!bm || !bm.mapViewer) { if (tries > 200) clearInterval(hook); return; }
+    clearInterval(hook);
+    var origReset = bm.resetCamera && bm.resetCamera.bind(bm);
+    if (origReset) {
+      bm.resetCamera = function(){
+        origReset();
+        if (bm.mapViewer && bm.mapViewer.controlsManager && bm.mapViewer.controlsManager.distance > 600) {
+          bm.mapViewer.controlsManager.distance = 450;
+          bm.mapViewer.updateLoadedMapArea();
+        }
+      };
+    }
+    if (!location.hash && bm.mapViewer.controlsManager && bm.mapViewer.controlsManager.distance >= 1000) {
+      bm.mapViewer.controlsManager.distance = 450;
+    }
+    if (bm.mapViewer.data && bm.mapViewer.data.loadedHiresViewDistance < 500) {
+      bm.mapViewer.data.loadedHiresViewDistance = 500;
+    }
+    if (bm.mapViewer.updateLoadedMapArea) bm.mapViewer.updateLoadedMapArea();
+  }, 50);
+})();
+</script>"""
+
+_map_http_client: Any = None
+_map_http_loop: asyncio.AbstractEventLoop | None = None
+
+
+def _get_map_http_client():
+    import httpx
+    global _map_http_client, _map_http_loop
+    loop = asyncio.get_running_loop()
+    if _map_http_client is None or _map_http_client.is_closed or _map_http_loop is not loop:
+        _map_http_client = httpx.AsyncClient(
+            timeout=httpx.Timeout(30.0, read=30.0, connect=5.0),
+            limits=httpx.Limits(max_connections=256, max_keepalive_connections=64, keepalive_expiry=30.0),
+        )
+        _map_http_loop = loop
+    return _map_http_client
+
+
+def _serve_file_or_gzip(target: Path, request: Request, headers: dict[str, str],
+                        media_type: str | None = None, allow_gz_fallback: bool = True) -> Response | None:
+    if target.is_file():
+        return FileResponse(target, media_type=media_type, headers=headers)
+    gz_target = target.with_name(target.name + ".gz")
+    if allow_gz_fallback and gz_target.is_file():
+        ae = request.headers.get("accept-encoding", "").lower()
+        if "gzip" in ae or "*" in ae or not ae:
+            return FileResponse(gz_target, media_type=media_type, headers={**headers, "Content-Encoding": "gzip"})
+        return Response(content=gzip.decompress(gz_target.read_bytes()), media_type=media_type, headers=headers)
+    return None
+
+
+def _serve_bluemap_disk(inst: ServerInstance, path: str, request: Request) -> Response | None:
+    """Serve static assets and pre-rendered BlueMap tiles straight from disk, bypassing the Java proxy."""
+    if path == "live/sse" or path.endswith("/live/sse") or "/live/" in f"/{path}":
+        return None
+    root = webmap.web_dir(inst).resolve()
+    if not root.is_dir():
+        return None
+    rel = (path or "index.html").lstrip("/")
+    if rel.endswith("/"):
+        rel += "index.html"
+    if ".." in rel.split("/"):
+        raise HTTPException(404)
+    target = (root / rel).resolve()
+    if not target.is_relative_to(root):
+        raise HTTPException(404)
+    if rel == "index.html" and target.is_file():
+        html = target.read_text(encoding="utf-8", errors="replace")
+        html = html.replace("</head>", f"{_BLUEMAP_BOOST_SCRIPT}\n</head>", 1) if "</head>" in html else html + _BLUEMAP_BOOST_SCRIPT
+        return Response(content=html, media_type="text/html; charset=utf-8",
+                        headers={"Cache-Control": "no-cache", "X-Frame-Options": "SAMEORIGIN"})
+    if m := _BLUEMAP_TILE_RE.match(rel):
+        lod, is_gz = m.group(1), bool(m.group(3))
+        media_type = "application/octet-stream" if lod == "0" else "image/png"
+        headers = {"Cache-Control": "no-cache", "X-Frame-Options": "SAMEORIGIN"}
+        return _serve_file_or_gzip(target, request, headers, media_type=media_type, allow_gz_fallback=not is_gz) \
+            or Response(status_code=204, headers=headers)
+    cc = "public, max-age=31536000, immutable" if rel.startswith("assets/") else "no-cache"
+    headers = {"Cache-Control": cc, "X-Frame-Options": "SAMEORIGIN"}
+    fallback_type = "application/json" if target.suffix.lower() == ".json" else "application/octet-stream"
+    if resp := _serve_file_or_gzip(
+        target, request, headers,
+        media_type=None if target.is_file() else fallback_type,
+        allow_gz_fallback=not rel.endswith(".gz"),
+    ):
+        return resp
+    return None
 
 
 @public_router.get("/map/{sid}/{path:path}", include_in_schema=False)
 async def webmap_public(sid: str, path: str, request: Request):
-    """The live web map. squaremap's generated web directory is served from disk; Dynmap and BlueMap run
-    their own web servers on a loopback port and are proxied here (GET only – no web chat or logins)."""
+    """The live web map. squaremap's generated web directory is served from disk; BlueMap files and
+    pre-compressed tiles are served directly from disk with live/ proxied, and Dynmap is proxied."""
     inst = manager.instances.get(sid)
     if not inst or not inst.cfg.webmap.enabled:
         raise HTTPException(404)
     port = webmap.proxy_port(inst)
     if port:
+        if inst.cfg.webmap.provider == "bluemap":
+            if not inst.running:
+                return JSONResponse({"detail": "Mapa jest dostępna, gdy serwer działa."}, status_code=503,
+                                    headers={"Cache-Control": "no-store"})
+            direct = _serve_bluemap_disk(inst, path, request)
+            if direct is not None:
+                return direct
         return await _proxy_map(inst, port, path, request)
     root = webmap.web_dir(inst).resolve()
     rel = path or "index.html"
@@ -2092,12 +2205,14 @@ async def _proxy_map(inst: ServerInstance, port: int, path: str, request: Reques
     is_sse = path == "live/sse" or path.endswith("/live/sse")
     fwd = {k: v for k, v in request.headers.items()
            if k.lower() in ("accept", "accept-encoding", "if-none-match", "if-modified-since", "range")}
-    client = httpx.AsyncClient(timeout=httpx.Timeout(20.0, read=90.0 if is_sse else 20.0, connect=3.0))
+    client = _get_map_http_client()
     try:
-        req = client.build_request("GET", url, params=request.query_params, headers=fwd)
+        req = client.build_request(
+            "GET", url, params=request.query_params, headers=fwd,
+            timeout=httpx.Timeout(30.0, read=90.0 if is_sse else 30.0, connect=5.0),
+        )
         upstream = await client.send(req, stream=True)
     except httpx.HTTPError:
-        await client.aclose()
         return JSONResponse({"detail": "Mapa jeszcze się uruchamia – spróbuj za chwilę."}, status_code=503,
                             headers={"Cache-Control": "no-store"})
     headers = {k: v for k, v in upstream.headers.items()
@@ -2114,7 +2229,6 @@ async def _proxy_map(inst: ServerInstance, port: int, path: str, request: Reques
 
     async def close():
         await upstream.aclose()
-        await client.aclose()
 
     # Raw bytes: BlueMap serves pre-compressed tiles with Content-Encoding, which must reach the browser as is.
     return StreamingResponse(upstream.aiter_raw(), status_code=upstream.status_code, headers=headers,

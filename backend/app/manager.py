@@ -568,6 +568,19 @@ class ServerInstance:
             self._chunky = ChunkyRunner(self)
         return self._chunky
 
+    def is_generating(self) -> bool:
+        """True while a map render (BlueMap, squaremap, Dynmap) or Chunky world generation is active."""
+        mr = getattr(self, "_map_render", None)
+        if mr is not None and mr.running:
+            return True
+        cr = getattr(self, "_chunky", None)
+        if cr is None and getattr(getattr(self, "cfg", None), "id", None):
+            if (self.dir / ".minenode" / "chunky.json").is_file():
+                cr = self.chunky_runner
+        if cr is not None and (cr.running or cr._pending is not None or (cr.active and not cr.task.get("user_paused"))):
+            return True
+        return False
+
     @property
     def dir(self) -> Path:
         return SERVERS_DIR / self.cfg.id
@@ -1065,8 +1078,22 @@ class ServerInstance:
                     break
         elif "Task " in plain or "No tasks" in plain:
             self.chunky_runner.on_line(plain)
-        elif (mr := getattr(self, "_map_render", None)) is not None and (mr.running or "render" in plain):
-            mr.on_line(plain)
+        elif (
+            (mr := getattr(self, "_map_render", None)) is not None
+            and (mr.running or "render" in plain.lower() or "Chunks:" in plain or "tiles rendered" in plain)
+        ) or (
+            (wm := getattr(getattr(self, "cfg", None), "webmap", None)) is not None
+            and wm.enabled
+            and (
+                "render" in plain.lower()
+                or "Chunks:" in plain
+                or "tiles rendered" in plain
+                or "currently being updated" in plain
+                or "currently being purged" in plain
+                or "progress:" in plain
+            )
+        ):
+            self.map_render.on_line(plain)
 
     def _add_chat(self, name: str, text: str, at: float | None = None, *, live: bool = False) -> None:
         name = MC_CODE_RE.sub("", name).strip()[:40]
@@ -1536,19 +1563,23 @@ class Manager:
                             and not self.backups.busy(inst.cfg.id)
                             and now - (inst.cfg.last_backup_at or inst.cfg.created_at) >= b.interval_hours * 3600):
                         inst.spawn(self.backups.create(inst, note="Automatyczna kopia", auto=True))
+                    if inst._map_render is not None:
+                        inst._map_render.tick(now)
+                    if inst.state == "online" and inst.chunky_runner.active:
+                        inst.chunky_runner.tick(now)
                     idle = inst.cfg.idle_shutdown_minutes
                     proxy_conns = self.proxy.per_server.get(inst.cfg.id, 0) if self.proxy else 0
+                    generating = inst.is_generating()
+                    if generating and not inst.online and not proxy_conns and inst.empty_since is not None:
+                        inst.empty_since = max(inst.empty_since, now - 60)
                     if (idle and inst.state == "online" and not inst.online and not proxy_conns
                             and inst.empty_since and now - inst.empty_since >= idle * 60
+                            and not generating
                             and not (self.backups and self.backups.busy(inst.cfg.id))):
                         inst.empty_since = None
                         inst.panel_log(f"Brak graczy od {idle} min – automatyczne wyłączanie serwera."
                                        + (" Uruchomi się sam, gdy ktoś spróbuje dołączyć." if inst.cfg.start_on_join else ""))
                         inst.spawn(inst.stop())
-                    if inst._map_render is not None:
-                        inst._map_render.tick(now)
-                    if inst.state == "online" and inst.chunky_runner.active:
-                        inst.chunky_runner.tick(now)
                     if (inst.cfg.restart_daily_at == hhmm and inst.state == "online"
                             and inst._last_daily_restart != today):
                         inst._last_daily_restart = today

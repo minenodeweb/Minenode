@@ -125,12 +125,25 @@ def test_dynmap_world_names_per_platform(tmp_path):
 def test_bluemap_first_start_only_generates_configs_then_accepts(tmp_path):
     inst, _, _ = _inst(tmp_path, "paper", port=28102, show_players=False)
     d = tmp_path / "plugins" / "BlueMap"
+    web_root = tmp_path / "bluemap" / "web"
+    web_root.mkdir(parents=True)
+    (web_root / "settings.json").write_text(json.dumps({
+        "defaultToFlatView": False, "hiresSliderMax": 500, "hiresSliderDefault": 100,
+        "lowresSliderMax": 7000, "lowresSliderDefault": 2000,
+    }), encoding="utf-8")
     assert webmap.bluemap_write_config(inst) is True
     core = (d / "core.conf").read_text()
     assert "accept-download: false" in core and "render-thread-count: 1" in core
     web = (d / "webserver.conf").read_text()
-    assert 'ip: "127.0.0.1"' in web and "port: 28102" in web and 'webroot: "bluemap/web"' in web and "sse-enabled: true" in web
-    assert "default-to-flat-view: true" in (d / "webapp.conf").read_text()
+    assert 'ip: "127.0.0.1"' in web and "port: 28102" in web and 'webroot: "bluemap/web"' in web
+    assert "sse-enabled: true" in web and "max-connection-count: 500" in web
+    webapp = (d / "webapp.conf").read_text()
+    assert "default-to-flat-view: true" in webapp
+    assert "hires-slider-default: 500" in webapp and "hires-slider-max: 1000" in webapp
+    assert "lowres-slider-default: 4000" in webapp and "lowres-slider-max: 10000" in webapp
+    synced = json.loads((web_root / "settings.json").read_text(encoding="utf-8"))
+    assert synced["defaultToFlatView"] is True and synced["hiresSliderDefault"] == 500 and synced["hiresSliderMax"] == 1000
+    assert synced["lowresSliderDefault"] == 4000 and synced["lowresSliderMax"] == 10000
     plugin_conf = (d / "plugin.conf").read_text()
     assert "live-player-markers: false" in plugin_conf and "hidden-game-modes:" in plugin_conf
 
@@ -585,3 +598,94 @@ def test_proxy_passes_precompressed_tiles_through(tmp_path):
         assert TestClient(app).get("/p/index.html").status_code == 503
     finally:
         srv.shutdown()
+
+
+def test_map_render_tracks_auto_renders_and_blocks_idle_shutdown(tmp_path, monkeypatch):
+    from app import manager as mgr
+    from app.models import ServerConfig, WebMapSettings
+
+    monkeypatch.setattr(mgr, "SERVERS_DIR", tmp_path)
+    cfg = ServerConfig(
+        id="srv1", name="S", type="paper", mc_version="1.21.4", subdomain="s",
+        internal_port=25600, webmap=WebMapSettings(enabled=True, provider="bluemap"),
+    )
+    server = object.__new__(mgr.ServerInstance)
+    server.cfg = cfg
+    server.state = "online"
+    server.proc = SimpleNamespace(returncode=None)
+    server.online = {}
+    server.empty_since = 100.0
+    server._waiters = []
+    server._map_render = None
+    server._chunky = None
+    server.spawn = lambda coro: asyncio.run(coro)
+    server.panel_log = lambda *_a: None
+
+    async def send_command(cmd, echo=True):
+        pass
+
+    server.send_command = send_command
+
+    maps = tmp_path / "srv1" / "plugins" / "BlueMap" / "maps"
+    maps.mkdir(parents=True)
+    (maps / "world.conf").write_text('name: "world"\n', encoding="utf-8")
+
+    # BlueMap automatic startup render watcher keeps idle shutdown blocked while busy
+    server.map_render.watch_bluemap()
+    assert server.is_generating() is True
+    server._parse_line("[12:00:00 INFO]: [BlueMap] map world is currently being updated")
+    assert server.is_generating() is True and server.map_render.requested_at is not None
+    server._parse_line("[12:01:00 INFO]: [BlueMap] 1 render-thread is idle")
+    assert server.is_generating() is False
+    assert server.empty_since > 100.0
+
+    # Console-started squaremap / dynmap renders are detected automatically too
+    for pid, start_line, end_line in (
+        ("squaremap", "[12:00:00 INFO]: [squaremap] Started full map render for minecraft:overworld",
+         "[12:05:00 INFO]: [squaremap] Finished rendering map for minecraft:overworld"),
+        ("dynmap", "[12:00:00 INFO]: [dynmap] Full render starting on world 'world'...",
+         "[12:05:00 INFO]: [dynmap] Full render of 'world' finished."),
+    ):
+        server.cfg.webmap.provider = pid
+        server._map_render = None
+        server.empty_since = 200.0
+        server._parse_line(start_line)
+        assert server.is_generating() is True
+        server._parse_line(end_line)
+        assert server.is_generating() is False
+        assert server.empty_since > 200.0
+
+
+def test_bluemap_disk_fastpath_serves_gzipped_tiles_and_injects_hires_boost(tmp_path, monkeypatch):
+    import gzip
+    from fastapi import FastAPI, Request
+    from fastapi.testclient import TestClient
+
+    from app import api
+
+    monkeypatch.setattr(api, "manager", SimpleNamespace(instances={"srv1": SimpleNamespace(
+        cfg=SimpleNamespace(webmap=WebMapSettings(enabled=True, provider="bluemap", port=28199)),
+        dir=tmp_path, running=True,
+    )}), raising=False)
+    web = tmp_path / "bluemap" / "web"
+    tile = web / "maps" / "world" / "tiles" / "0" / "x0" / "z0.prbm.gz"
+    tile.parent.mkdir(parents=True)
+    tile.write_bytes(gzip.compress(b"PRBM"))
+    (web / "index.html").write_text("<html><head><title>BlueMap</title></head><body></body></html>", encoding="utf-8")
+
+    app = FastAPI()
+
+    @app.get("/map/{sid}/{path:path}")
+    async def m(sid: str, path: str, request: Request):
+        return await api.webmap_public(sid, path, request)
+
+    client = TestClient(app)
+    idx = client.get("/map/srv1/index.html")
+    assert idx.status_code == 200 and "minenode-bm-hires-v1" in idx.text
+
+    res = client.get("/map/srv1/maps/world/tiles/0/x0/z0.prbm", headers={"Accept-Encoding": "gzip"})
+    assert res.status_code == 200 and res.content == b"PRBM"
+    assert res.headers.get("content-encoding") == "gzip"
+
+    missing = client.get("/map/srv1/maps/world/tiles/0/x99/z99.prbm")
+    assert missing.status_code == 204

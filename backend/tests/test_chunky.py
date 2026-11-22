@@ -1,4 +1,5 @@
 import asyncio
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -177,3 +178,60 @@ def test_an_older_build_is_never_offered_as_an_update():
     assert chunky._newer("1.5.67", "1.5.66")
     assert not chunky._newer("1.4.40", "1.5.66")
     assert not chunky._newer("1.5.66", "1.5.66")
+
+
+def test_is_generating_blocks_idle_shutdown_only_while_chunky_active(tmp_path):
+    from app import manager as mgr
+    from app.models import ChunkySettings, ServerConfig
+
+    orig = mgr.SERVERS_DIR
+    mgr.SERVERS_DIR = tmp_path
+    try:
+        cfg = ServerConfig(id="s1", name="S", type="paper", mc_version="26.3", subdomain="s", internal_port=25600,
+                           chunky=ChunkySettings(only_when_empty=True))
+        inst = object.__new__(mgr.ServerInstance)
+        inst.cfg = cfg
+        inst.state = "online"
+        inst.proc = SimpleNamespace(returncode=None)
+        inst.online = {}
+        inst.empty_since = time.time()
+        inst._map_render = None
+        inst._chunky = None
+        inst.spawn = lambda coro: asyncio.run(coro)
+        inst.send_command = lambda cmd, echo=True: asyncio.sleep(0)
+        inst.panel_log = lambda *_a: None
+
+        assert inst.is_generating() is False
+
+        r = inst.chunky_runner
+        # Waiting for IDLE_DELAY while active and unpaused -> blocks shutdown
+        r.start()
+        assert r.active and not r.running
+        assert inst.is_generating() is True
+
+        # User pause -> does NOT keep server alive
+        r.pause()
+        assert inst.is_generating() is False
+
+        # Running task -> blocks shutdown; pause confirmation stops blocking; completion refreshes empty_since
+        inst.empty_since = 500.0
+        r.resume()
+        assert inst.is_generating() is True
+        r.on_line("[Chunky] Task started in world for the square region centered at 0.0, 0.0 with radius 2000.0.")
+        assert inst.is_generating() is True
+        r.pause()
+        r.on_line("[Chunky] Task paused for world.")
+        assert inst.is_generating() is False
+        r.resume()
+        r.on_line("[Chunky] Task started in world for the square region centered at 0.0, 0.0 with radius 2000.0.")
+        r.on_line("[Chunky] Task finished for world. Processed: 100 chunks (100.00%), Total time: 0:00:10")
+        assert inst.is_generating() is False
+        assert inst.empty_since > 500.0
+
+        # Cancel also stops blocking
+        r.start()
+        assert inst.is_generating() is True
+        r.cancel()
+        assert inst.is_generating() is False
+    finally:
+        mgr.SERVERS_DIR = orig
