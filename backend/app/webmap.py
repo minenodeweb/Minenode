@@ -39,7 +39,7 @@ INFO = {
     "squaremap": {"title": "squaremap", "three_d": False, "proxy": False, "incremental": False,
                   "engines": ("paper", "purpur", "fabric", "quilt", "forge", "neoforge"),
                   "about": "Lekka mapa 2D z góry. Najmniejsze obciążenie serwera."},
-    "dynmap": {"title": "Dynmap", "three_d": True, "proxy": True, "incremental": False,
+    "dynmap": {"title": "Dynmap", "three_d": True, "proxy": False, "incremental": False,
                "engines": ("paper", "purpur", "fabric", "quilt", "forge"),
                "about": "Klasyczna mapa w stylu Google Maps: widok płaski, opcjonalnie izometryczny."},
     "bluemap": {"title": "BlueMap", "three_d": True, "proxy": True, "incremental": True,
@@ -135,6 +135,18 @@ def _set_nested(text: str, key: str, value: str) -> str:
     return re.sub(rf"^(\s+){re.escape(key)}\s*:.*$", rf"\g<1>{key}: {value}", text, flags=re.M)
 
 
+_DYNMAP_INTERNAL = re.compile(r"^(\s*)- class: org\.dynmap\.InternalClientUpdateComponent\s*$", re.M)
+_DYNMAP_JSONFILE = re.compile(r"^(\s*)- class: org\.dynmap\.JsonFileClientUpdateComponent\s*\n(?!\1  writeinterval:)", re.M)
+
+
+def _dynmap_standalone(text: str) -> str:
+    """Swap the active client-update component for JsonFileClientUpdateComponent (writes JSON files).
+
+    Its options are the same as the internal component's (sendposition, allowwebchat, …), so they stay."""
+    text = _DYNMAP_INTERNAL.sub(r"\1- class: org.dynmap.JsonFileClientUpdateComponent", text)
+    return _DYNMAP_JSONFILE.sub(lambda m: m.group(0) + f"{m.group(1)}  writeinterval: 1\n", text)
+
+
 def dynmap_write_config(inst: "ServerInstance") -> None:
     d = dynmap_dir(inst)
     d.mkdir(parents=True, exist_ok=True)
@@ -144,8 +156,12 @@ def dynmap_write_config(inst: "ServerInstance") -> None:
     except FileNotFoundError:
         text = _from_jar(DYNMAP, inst, "configuration.txt") or ""
     wm = inst.cfg.webmap
+    # Dynmap's documented "external web server" mode: no web server of its own; the map state is
+    # written to web/standalone/*.json every second and the panel serves the web folder as files –
+    # which also keeps the map viewable while the server is stopped.
+    text = _dynmap_standalone(text)
     owned = (
-        ("disable-webserver", "false"),
+        ("disable-webserver", "true"),
         ("webserver-bindaddress", "127.0.0.1"),
         ("webserver-port", str(wm.port or 8123)),
         ("deftemplatesuffix", "lowres"),
@@ -370,7 +386,7 @@ def map_available(inst: "ServerInstance") -> bool:
         return False
     if not (web_dir(inst) / "index.html").is_file():
         return False
-    return not INFO[wm.provider]["proxy"] or bool(inst.running)
+    return bool(inst.running) or getattr(wm, "always_on", True)
 
 
 def proxy_port(inst: "ServerInstance") -> Optional[int]:
@@ -499,6 +515,7 @@ async def state(inst: "ServerInstance", refresh: bool = False) -> dict:
     current = next(p for p in providers if p["id"] == wm.provider)
     return {
         "enabled": wm.enabled, "provider": wm.provider, "show_players": wm.show_players, "render_3d": wm.render_3d,
+        "always_on": wm.always_on,
         "providers": providers, "current": current, "engine": inst.cfg.type, "mc_version": inst.cfg.mc_version,
         "map_available": map_available(inst), "map_url": map_url(inst), "public_url": squaremap.public_url(inst),
         "data_dir": squaremap.rel_to_server(inst, data_dir(inst)), "running": bool(inst.running),
@@ -927,3 +944,27 @@ class MapRender:
         self._bluemap_idle = 0
         self._bluemap_seen = False
         self.eta = None
+
+
+# ====================================================================== map while the server is stopped
+
+_PLAYER_FILES = re.compile(r"^(?:tiles/players\.json|standalone/dynmap_[^/]+\.json|maps/[^/]+/live/players\.json)$")
+
+
+def offline_players_json(rel: str, raw: bytes) -> Optional[bytes]:
+    """The last player list a map wrote stays on disk after a stop: show nobody instead.
+
+    squaremap ``tiles/players.json``, Dynmap ``standalone/dynmap_<world>.json`` and BlueMap's
+    ``maps/<map>/live/players.json``. Returns None for files that are not player lists."""
+    if not _PLAYER_FILES.match(rel) or rel.endswith("dynmap_config.json"):
+        return None
+    try:
+        data = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError):
+        return None
+    if not isinstance(data, dict) or not isinstance(data.get("players"), list):
+        return None
+    data["players"] = []
+    if "currentcount" in data:
+        data["currentcount"] = 0
+    return json.dumps(data).encode("utf-8")

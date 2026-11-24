@@ -202,15 +202,69 @@ def test_bluemap_keeps_user_settings_in_existing_files(tmp_path):
     assert "port: 28103" in text and "port: 8100" not in text and "# comment" in text and 'file: "x"' in text
 
 
-def test_map_availability_needs_a_running_server_for_proxied_maps(tmp_path):
+def test_map_is_available_24_7_by_default_and_only_online_when_switched_off(tmp_path):
     inst, _, _ = _inst(tmp_path, "paper", provider="bluemap", port=28104)
     (tmp_path / "bluemap" / "web").mkdir(parents=True)
     (tmp_path / "bluemap" / "web" / "index.html").write_text("<html>")
+    assert inst.cfg.webmap.always_on  # on by default
     assert webmap.map_available(inst) and webmap.proxy_port(inst) == 28104
     inst.running = False
+    assert webmap.map_available(inst)  # served from disk while the server is stopped
+    inst.cfg.webmap.always_on = False
     assert not webmap.map_available(inst)
     inst.cfg.webmap.provider = "squaremap"
     assert webmap.proxy_port(inst) is None
+
+
+def test_dynmap_uses_its_file_mode_so_the_panel_can_serve_it_offline(tmp_path):
+    inst, _, _ = _inst(tmp_path, port=28105)
+    cfg = tmp_path / "plugins" / "dynmap" / "configuration.txt"
+    cfg.parent.mkdir(parents=True)
+    cfg.write_text(DYNMAP_CFG + "  #- class: org.dynmap.JsonFileClientUpdateComponent\n  #  writeinterval: 1\n")
+    webmap.dynmap_write_config(inst)
+    webmap.dynmap_write_config(inst)  # idempotent
+    text = cfg.read_text()
+    assert "  - class: org.dynmap.JsonFileClientUpdateComponent\n    writeinterval: 1\n    sendhealth: true" in text
+    assert "InternalClientUpdateComponent" not in text and text.count("writeinterval: 1") == 2
+    assert "disable-webserver: true" in text and "    allowwebchat: false" in text
+    assert webmap.proxy_port(inst) is None  # files only, no proxy
+    inst.cfg.webmap.provider = "dynmap"
+    assert webmap.proxy_port(inst) is None
+
+
+def test_offline_player_lists_are_emptied():
+    sq = webmap.offline_players_json("tiles/players.json", b'{"max": 20, "players": [{"name": "Steve"}]}')
+    assert json.loads(sq) == {"max": 20, "players": []}
+    dyn = webmap.offline_players_json("standalone/dynmap_world.json",
+                                      b'{"currentcount": 2, "players": [{"name": "a"}], "updates": []}')
+    assert json.loads(dyn) == {"currentcount": 0, "players": [], "updates": []}
+    bm = webmap.offline_players_json("maps/world/live/players.json", b'{"players": [{"uuid": "x"}]}')
+    assert json.loads(bm) == {"players": []}
+    assert webmap.offline_players_json("standalone/dynmap_config.json", b'{"players": []}') is None
+    assert webmap.offline_players_json("tiles/world/settings.json", b'{"players": [1]}') is None
+
+
+def test_public_route_serves_the_map_from_disk_while_stopped(tmp_path, monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from app import api
+
+    inst, _, _ = _inst(tmp_path, "paper", provider="bluemap", port=1)
+    inst.running = False
+    web = tmp_path / "bluemap" / "web"
+    (web / "maps" / "world" / "tiles" / "1" / "x0").mkdir(parents=True)
+    (web / "index.html").write_text("<html><head></head></html>")
+    (web / "maps" / "world" / "tiles" / "1" / "x0" / "z0.png").write_bytes(b"png")
+    monkeypatch.setattr(api, "manager", SimpleNamespace(instances={"srv1": inst}), raising=False)
+    app = FastAPI()
+    app.include_router(api.public_router)
+    c = TestClient(app)
+    assert c.get("/map/srv1/").status_code == 200
+    assert c.get("/map/srv1/maps/world/tiles/1/x0/z0.png").content == b"png"
+    assert c.get("/map/srv1/maps/world/live/players.json").json() == {"players": []}
+    assert c.get("/map/srv1/maps/world/live/sse").status_code == 204
+    inst.cfg.webmap.always_on = False
+    assert c.get("/map/srv1/").status_code == 503
 
 
 # ---------------------------------------------------------------- manual render

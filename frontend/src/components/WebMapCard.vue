@@ -3,7 +3,7 @@
     <div class="card-head">
       <MapIcon class="hi" /><h3>{{ $t('Mapa świata na żywo') }}</h3>
       <span v-if="v && v.enabled && v.map_available" class="badge green">{{ $t('na stronie') }}</span>
-      <span v-else-if="v && v.enabled && cur.proxy && !v.running" class="badge">{{ $t('gdy serwer działa') }}</span>
+      <span v-else-if="v && v.enabled && !v.always_on && !v.running" class="badge">{{ $t('gdy serwer działa') }}</span>
       <span v-else-if="v && v.enabled" class="badge amber">{{ $t('oczekuje na start') }}</span>
       <span v-else-if="v" class="badge">{{ $t('opcjonalna') }}</span>
     </div>
@@ -40,6 +40,9 @@
         <template v-if="cur.supported">
           <Toggle :model-value="v.show_players" :disabled="busy" :label="$t('Pokazuj pozycje graczy')"
                   :hint="$t('Gracze online są widoczni na mapie na żywo. Wyłącz, jeśli pozycje mają zostać tajemnicą.')" @update:model-value="(on) => save({ show_players: on })" />
+          <Toggle :model-value="v.always_on" :disabled="busy" :label="$t('Podgląd mapy 24/7')"
+                  :hint="$t('Mapa jest dostępna także wtedy, gdy serwer jest wyłączony – z ostatnio wyrenderowanych kafelków, bez graczy na żywo. Wyłączone: mapa działa tylko razem z serwerem.')"
+                  @update:model-value="(on) => save({ always_on: on })" />
           <div v-if="cur.three_d" class="row wrap" style="gap: 10px">
             <span class="small">{{ $t('Widok') }}</span>
             <div class="seg">
@@ -108,7 +111,7 @@
           <div class="grow">{{ $t('Zmiana zadziała po restarcie serwera.') }}</div>
           <button class="btn sm" @click="doRestart">{{ $t('Restartuj teraz') }}</button>
         </div>
-        <div v-else-if="v.enabled && !v.map_available && !(cur.proxy && !v.running)" class="callout info small">
+        <div v-else-if="v.enabled && !v.map_available && !(!v.always_on && !v.running)" class="callout info small">
           <Info /><div>{{ $t('Mapa pojawi się po uruchomieniu serwera z nową mapą. Pierwsze kafelki mogą potrzebować chwili.') }}</div>
         </div>
       </template>

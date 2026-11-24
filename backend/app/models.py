@@ -46,6 +46,7 @@ class WebMapSettings(BaseModel):
     provider: WebMapProvider = "squaremap"
     show_players: bool = True  # player positions on the map
     render_3d: bool = False  # Dynmap/BlueMap: False renders only the light flat (2D) view
+    always_on: bool = True  # show the map (from the files on disk) while the server is stopped too
     port: Optional[int] = None  # loopback web server of Dynmap/BlueMap, proxied by the panel
 
 

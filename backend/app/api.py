@@ -1986,7 +1986,7 @@ def _public_stats(inst: ServerInstance) -> dict:
             "enabled": inst.cfg.webmap.enabled,
             "provider": inst.cfg.webmap.provider,
             "title": webmap.INFO[inst.cfg.webmap.provider]["title"],
-            "needs_running": webmap.INFO[inst.cfg.webmap.provider]["proxy"],
+            "needs_running": not inst.cfg.webmap.always_on,
             "available": map_ready,
             "url": webmap.map_url(inst) if map_ready else None,
         },
@@ -2210,12 +2210,15 @@ async def webmap_public(sid: str, path: str, request: Request):
     inst = manager.instances.get(sid)
     if not inst or not inst.cfg.webmap.enabled:
         raise HTTPException(404)
+    running = bool(inst.running)
+    if not running and not inst.cfg.webmap.always_on:
+        return JSONResponse({"detail": "Mapa jest dostępna, gdy serwer działa."}, status_code=503,
+                            headers={"Cache-Control": "no-store"})
     port = webmap.proxy_port(inst)
     if port:
         if inst.cfg.webmap.provider == "bluemap":
-            if not inst.running:
-                return JSONResponse({"detail": "Mapa jest dostępna, gdy serwer działa."}, status_code=503,
-                                    headers={"Cache-Control": "no-store"})
+            if not running:  # "24/7": everything BlueMap rendered is on disk; only live data is missing
+                return _bluemap_offline(inst, path, request)
             direct = _serve_bluemap_disk(inst, path, request)
             if direct is not None:
                 return direct
@@ -2233,7 +2236,28 @@ async def webmap_public(sid: str, path: str, request: Request):
     else:
         # Tile changes and the JSON documents that describe them are polled live by the map.
         headers["Cache-Control"] = "no-cache"
+    if not running and rel.endswith(".json"):
+        empty = webmap.offline_players_json(rel, target.read_bytes())
+        if empty is not None:
+            return Response(content=empty, media_type="application/json", headers=headers)
     return FileResponse(target, headers=headers)
+
+
+def _bluemap_offline(inst: ServerInstance, path: str, request: Request) -> Response:
+    """BlueMap while the server is stopped: the webapp, settings and tiles come from disk; the live
+    data its integrated web server would answer is replaced by "nobody online"."""
+    rel = (path or "index.html").lstrip("/")
+    headers = {"Cache-Control": "no-store", "X-Frame-Options": "SAMEORIGIN"}
+    if "/live/" in f"/{rel}" or rel.endswith("live/sse"):
+        if rel.endswith("/live/players.json"):
+            return JSONResponse({"players": []}, headers=headers)
+        if rel.endswith("/live/markers.json"):
+            return JSONResponse({}, headers=headers)
+        return Response(status_code=204, headers=headers)
+    direct = _serve_bluemap_disk(inst, path, request)
+    if direct is None:
+        raise HTTPException(404)
+    return direct
 
 
 async def _proxy_map(inst: ServerInstance, port: int, path: str, request: Request):
@@ -2380,6 +2404,7 @@ class WebMapBody(BaseModel):
     provider: Optional[Literal["squaremap", "dynmap", "bluemap"]] = None
     show_players: Optional[bool] = None
     render_3d: Optional[bool] = None
+    always_on: Optional[bool] = None  # show the map while the server is stopped
     update: bool = False  # install the newest build now
 
 
@@ -2397,6 +2422,12 @@ async def webmap_set(sid: str, body: WebMapBody, _: str = Depends(auth.require_u
         wm.render_3d = body.render_3d
     if body.enabled is not None:
         wm.enabled = body.enabled
+    if body.always_on is not None:
+        wm.always_on = body.always_on
+    if wm.model_dump(exclude={"always_on"}) == before.model_dump(exclude={"always_on"}) and not body.update:
+        # Only "map 24/7" changed: the panel decides what it serves, nothing to install or restart.
+        manager.save_server(inst.cfg)
+        return {**await webmap.state(inst), "restart_required": False}
     if wm.enabled and not webmap.engine_supported(inst, wm.provider):
         inst.cfg.webmap = before
         raise HTTPException(400, webmap.unsupported_reason(inst, wm.provider) or "Ta mapa nie działa na tym silniku")
@@ -2421,7 +2452,7 @@ async def webmap_set(sid: str, body: WebMapBody, _: str = Depends(auth.require_u
     elif before.enabled and not wm.enabled:
         inst.panel_log("Mapa wyłączona.")
     # Jars change only when the map is switched on/off or replaced; BlueMap reloads options online.
-    options_changed = wm.model_dump(exclude={"port"}) != before.model_dump(exclude={"port"})
+    options_changed = wm.model_dump(exclude={"port", "always_on"}) != before.model_dump(exclude={"port", "always_on"})
     jar_updated = bool((result or {}).get("updated"))
     live_reloaded = (
         wm.enabled and before.enabled and wm.provider == "bluemap" and before.provider == "bluemap"

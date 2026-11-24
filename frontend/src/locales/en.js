@@ -1368,6 +1368,8 @@ const strings = {
   'Ten składnik aktualizuje się razem z obrazem Docker MineNode': 'This component is updated together with the MineNode Docker image',
   'Poczekaj na zakończenie instalacji serwera': 'Wait until the server finishes installing',
   // web map choice (squaremap / Dynmap / BlueMap) & server-side LOD
+  'Podgląd mapy 24/7': 'Map preview 24/7',
+  'Mapa jest dostępna także wtedy, gdy serwer jest wyłączony – z ostatnio wyrenderowanych kafelków, bez graczy na żywo. Wyłączone: mapa działa tylko razem z serwerem.': 'The map stays available while the server is stopped – from the last rendered tiles, without live players. Off: the map only works while the server runs.',
   'Serwer wysyła uproszczony teren daleko poza zasięg widzenia. Zainstaluj jeden z modów w wersji dla Minecrafta {v}, a od razu zobaczysz odległe góry i wybrzeża.': 'The server sends simplified terrain far beyond view distance. Install one of these mods for Minecraft {v} and you will see distant mountains and coastlines right away.',
   'Zamiast LOD Server Support może być Voxy Server Side – to ten sam mod.': 'Voxy Server Side works instead of LOD Server Support – it is the same mod.',
   'Sprawdzanie mapy…': 'Checking the map…',
