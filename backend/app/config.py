@@ -40,9 +40,6 @@ BEDROCK_SAVED_LOGINS = tuple(
     name.strip() for name in os.environ.get("MINENODE_BEDROCK_SAVED_LOGINS", "").split(",") if name.strip()
 )
 
-# Optional bootstrap admin account (only used when no user exists yet).
-BOOTSTRAP_USER = os.environ.get("MINENODE_ADMIN_USER")
-BOOTSTRAP_PASSWORD = os.environ.get("MINENODE_ADMIN_PASSWORD")
 CURSEFORGE_API_KEY_ENV = os.environ.get("CURSEFORGE_API_KEY", "")
 SECURE_COOKIES = os.environ.get("MINENODE_SECURE_COOKIES", "false").lower() in ("1", "true", "yes")
 

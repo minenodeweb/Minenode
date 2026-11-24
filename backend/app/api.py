@@ -29,9 +29,9 @@ from . import auth, auth_sessions, content, files, java as javamod, modpacks, pl
 from . import chunky, itemicons, lod, playerstats, squaremap, updates, webmap
 from .models import ChunkySettings
 from .backups import safe_extract
-from .config import BEDROCK_PORT, DATA_DIR, PROXY_PORT, SECURE_COOKIES, TMP_DIR, VERSION, CURSEFORGE_API_KEY_ENV
+from .config import BEDROCK_PORT, DATA_DIR, PANEL_PORT, PROXY_PORT, SECURE_COOKIES, TMP_DIR, VERSION, CURSEFORGE_API_KEY_ENV
 from .manager import Manager, ServerError, ServerInstance
-from .models import BackupSchedule, HOSTNAME_RE, JavaConfig, ModpackInfo, PanelSettings, PublicPageSettings, ServerConfig, ServerType, SERVER_TYPES
+from .models import BackupSchedule, HOSTNAME_RE, JavaConfig, ModpackInfo, PanelSettings, PublicPageSettings, SERVER_TEXTS_EN, ServerConfig, ServerType, SERVER_TYPES
 from .properties import MANAGED_KEYS, read_properties, update_properties
 
 router = APIRouter(prefix="/api")
@@ -104,7 +104,16 @@ def _set_cookie(resp: Response, token: str) -> None:
 @router.get("/auth/state")
 async def auth_state(request: Request):
     user = auth.verify_token(request.cookies.get(auth.COOKIE))
-    return {"setup_required": auth.setup_required(), "user": user, "version": VERSION}
+    m = globals().get("manager")  # injected by main; absent in some tests
+    settings = m.settings if m else None
+    if auth.setup_required():
+        step = "account"
+    elif settings is not None and not settings.setup_completed:
+        step = "panel"  # account created, the panel's own setup still to do
+    else:
+        step = None
+    return {"setup_required": auth.setup_required(), "setup_step": step, "user": user, "version": VERSION,
+            "language": settings.default_language if settings else None}
 
 
 @router.post("/auth/setup")
@@ -323,8 +332,9 @@ async def get_settings(_: str = Depends(auth.require_user)):
     d["curseforge_configured"] = bool(cf_key())
     d["curseforge_from_env"] = bool(CURSEFORGE_API_KEY_ENV) and not s.curseforge_api_key
     d["proxy_port"] = PROXY_PORT
+    d["panel_port"] = PANEL_PORT
     d["domains"] = s.domains()
-    d["defaults"] = {k: PanelSettings.model_fields[k].default for k in TEXT_SETTINGS}
+    d["defaults"] = _text_defaults(s)
     d["resource_pack_base"] = rpacks.public_base(manager)
     from .config import VOICE_PORT
     d["voice_port"] = VOICE_PORT
@@ -361,6 +371,59 @@ class SettingsBody(BaseModel):
     kick_offline: Optional[str] = Field(default=None, max_length=500)
     kick_starting: Optional[str] = Field(default=None, max_length=500)
     kick_waking: Optional[str] = Field(default=None, max_length=500)
+
+
+def _text_defaults(s: PanelSettings) -> dict:
+    """"Reset to default" texts: English when English was chosen in the first-run wizard."""
+    english = s.default_language == "en"
+    return {k: SERVER_TEXTS_EN.get(k, PanelSettings.model_fields[k].default) if english
+            else PanelSettings.model_fields[k].default for k in TEXT_SETTINGS}
+
+
+class SetupPanelBody(BaseModel):
+    language: Literal["en", "pl"] = "en"
+    base_domain: str = ""
+    extra_domains: list[str] = Field(default_factory=list, max_length=50)
+    public_address: str = Field(default="", max_length=253)
+    pack_subdomain: str = Field(default="packs", max_length=63)
+    public_panel_url: str = Field(default="", max_length=300)
+
+
+@router.get("/setup/info")
+async def setup_info(_: str = Depends(auth.require_user)):
+    """What the first-run wizard shows: the ports to open and the current values."""
+    from .config import VOICE_PORT
+    s = manager.settings
+    return {"completed": s.setup_completed, "language": s.default_language, "domains": s.domains(),
+            "public_address": s.public_address, "pack_subdomain": s.pack_subdomain,
+            "public_panel_url": s.public_panel_url, "proxy_port": PROXY_PORT,
+            "ports": [
+                {"port": PANEL_PORT, "proto": "TCP", "what": "Panel WWW (ten panel)"},
+                {"port": PROXY_PORT, "proto": "TCP", "what": "Minecraft Java – wszystkie serwery i paczki zasobów"},
+                {"port": BEDROCK_PORT, "proto": "TCP + UDP", "what": "Minecraft Bedrock (Geyser)"},
+                {"port": VOICE_PORT, "proto": "UDP", "what": "Simple Voice Chat"},
+            ]}
+
+
+@router.post("/setup/panel")
+async def setup_panel(body: SetupPanelBody, _: str = Depends(auth.require_user)):
+    """Last step of the first-run wizard: language, domains and resource pack address."""
+    s = manager.settings
+    if s.setup_completed:
+        raise HTTPException(409, "Panel jest już skonfigurowany – zmiany wprowadzisz w Ustawieniach")
+    await put_settings(SettingsBody(base_domain=body.base_domain, extra_domains=body.extra_domains,
+                                    public_address=body.public_address, pack_subdomain=body.pack_subdomain,
+                                    public_panel_url=body.public_panel_url), "")
+    s = manager.settings
+    s.default_language = body.language
+    if body.language == "en":
+        # Only texts still at their Polish defaults are replaced (never something the owner wrote).
+        for key, text in SERVER_TEXTS_EN.items():
+            if getattr(s, key) == PanelSettings.model_fields[key].default:
+                setattr(s, key, text)
+    s.setup_completed = True
+    manager.save_settings(s)
+    return {"ok": True, "settings": await get_settings("")}
 
 
 def _clean_domain(raw: str) -> str:

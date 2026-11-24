@@ -5,9 +5,17 @@ import en from './locales/en'
 
 const LOCALES = ['pl', 'en']
 const stored = (() => { try { return localStorage.getItem('minenode-lang') } catch { return null } })()
-const guess = (navigator.language || 'en').toLowerCase().startsWith('pl') ? 'pl' : 'en'
 
-export const i18n = reactive({ locale: LOCALES.includes(stored) ? stored : guess })
+// English until the panel says otherwise: the first-run wizard starts in English and its language
+// choice becomes the default for browsers that never picked a language themselves.
+export const i18n = reactive({ locale: LOCALES.includes(stored) ? stored : 'en' })
+
+/** The panel's default language – used only when this browser has no choice of its own. */
+export function applyDefaultLocale(l) {
+  if (LOCALES.includes(stored) || !LOCALES.includes(l)) return
+  i18n.locale = l
+  document.documentElement.lang = l
+}
 
 const fill = (s, params) => (params ? s.replace(/\{(\w+)\}/g, (m, k) => (params[k] ?? m)) : s)
 

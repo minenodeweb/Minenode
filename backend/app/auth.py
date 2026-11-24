@@ -12,14 +12,14 @@ from collections import deque
 
 from fastapi import HTTPException, Request, WebSocket
 
-from .config import BOOTSTRAP_PASSWORD, BOOTSTRAP_USER, PANEL_DIR
+from .config import PANEL_DIR
 from .models import User
 from .store import JsonStore
 
 COOKIE = "minenode_session"
 SESSION_TTL = 14 * 24 * 3600
 
-_users = JsonStore(PANEL_DIR / "users.json", dict)
+_users = JsonStore(PANEL_DIR / "users.json", dict, follow_file=True)  # reset_password.sh edits it from outside
 _secret_file = PANEL_DIR / "secret.key"
 # Signatures of cookies ended by "Wyloguj" (sha256 -> expiry), so a copied cookie stops working too.
 _revoked = JsonStore(PANEL_DIR / "revoked_sessions.json", dict)
@@ -97,11 +97,6 @@ def delete_user(username: str) -> None:
         raise HTTPException(400, "Nie można usunąć ostatniego użytkownika")
     _users.data.pop(username)
     _users.save()
-
-
-def bootstrap() -> None:
-    if setup_required() and BOOTSTRAP_USER and BOOTSTRAP_PASSWORD:
-        create_user(BOOTSTRAP_USER, BOOTSTRAP_PASSWORD)
 
 
 def _recent(key: str, now: float) -> deque:

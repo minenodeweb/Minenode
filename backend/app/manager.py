@@ -1401,6 +1401,14 @@ class Manager:
     def settings(self) -> PanelSettings:
         return PanelSettings.model_validate(self.settings_store.data or {})
 
+    def migrate_setup_state(self, has_users: bool) -> None:
+        """Panels set up before the first-run wizard existed skip its panel steps."""
+        data = self.settings_store.data or {}
+        if has_users and "setup_completed" not in data:
+            s = self.settings
+            s.setup_completed = True
+            self.save_settings(s)
+
     def save_settings(self, s: PanelSettings) -> None:
         self.settings_store.save(s.model_dump())
 

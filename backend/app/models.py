@@ -187,6 +187,9 @@ class ServerConfig(BaseModel):
 
 
 class PanelSettings(BaseModel):
+    # First-run wizard: account (users.json) -> language, domain & ports, resource packs.
+    setup_completed: bool = False
+    default_language: Optional[Literal["en", "pl"]] = None  # UI language for browsers without their own choice
     base_domain: str = ""  # the first (default) main domain
     extra_domains: list[str] = []  # more main domains: every server answers as <subdomain>.<each domain>
     default_server_id: Optional[str] = None
@@ -213,6 +216,7 @@ class PanelSettings(BaseModel):
     kick_starting: str = "{name} uruchamia się – spróbuj ponownie za chwilę."
     backup_destinations: list[BackupDestination] = []
     kick_waking: str = "{name} właśnie się uruchamia!\nDołącz ponownie za około minutę."
+    join_hint: str = " §8(dołącz, aby uruchomić)"  # {join_hint} when "start on join" is on
 
     def domains(self) -> list[str]:
         """Every main domain, the default one first (normalised, without duplicates)."""
@@ -222,6 +226,20 @@ class PanelSettings(BaseModel):
             if d and d not in out:
                 out.append(d)
         return out
+
+
+# Server texts in English, written once when the owner picks English in the first-run wizard. They are
+# ordinary settings afterwards: changing the panel language later never rewrites them.
+SERVER_TEXTS_EN = {
+    "motd_offline": "§f{name}\n§7● The server is offline{join_hint}",
+    "motd_starting": "§f{name}\n§e● The server is starting…",
+    "version_offline": "§c● Offline",
+    "version_starting": "§e● Starting",
+    "kick_offline": "{name} is offline.",
+    "kick_starting": "{name} is starting – try again in a moment.",
+    "kick_waking": "{name} is starting up!\nJoin again in about a minute.",
+    "join_hint": " §8(join to start it)",
+}
 
 
 class User(BaseModel):

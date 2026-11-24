@@ -769,7 +769,8 @@ class MinecraftProxy:
                 "motd": inst.props().get("motd", inst.cfg.name),
                 "address": inst.address(),
                 "mc_version": inst.cfg.mc_version,
-                "join_hint": " §8(dołącz, aby uruchomić)" if inst.cfg.start_on_join and inst.cfg.installed else "",
+                "join_hint": (getattr(self.m.settings, "join_hint", None) or " §8(dołącz, aby uruchomić)")
+                if inst.cfg.start_on_join and inst.cfg.installed else "",
             }
         out = template
         for k, v in values.items():

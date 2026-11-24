@@ -124,8 +124,10 @@ COPY --from=picolimbo /out/licenses ./licenses
 COPY --from=bedrock_ext /ext/MineNodeRouter.jar ./bedrock_ext/MineNodeRouter.jar
 COPY --from=web /web/dist ./static
 COPY docker/entrypoint.sh /entrypoint.sh
+COPY reset_password.sh /usr/local/bin/reset_password.sh
 # strip Windows line endings (a CRLF checkout breaks the shebang: "exec /entrypoint.sh failed")
-RUN sed -i 's/\r$//' /entrypoint.sh && chmod +x /entrypoint.sh && mkdir -p /data && chown minenode:minenode /data
+RUN sed -i 's/\r$//' /entrypoint.sh /usr/local/bin/reset_password.sh && chmod +x /entrypoint.sh /usr/local/bin/reset_password.sh \
+ && mkdir -p /data && chown minenode:minenode /data
 
 VOLUME ["/data"]
 EXPOSE 8080 25565 24454/udp 19132/tcp 19132/udp

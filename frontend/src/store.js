@@ -1,6 +1,7 @@
 import { reactive } from 'vue'
 
-export const auth = reactive({ user: null, setupRequired: false, version: '', ready: false })
+// setupStep: 'account' (no user yet), 'panel' (first-run wizard not finished) or null
+export const auth = reactive({ user: null, setupRequired: false, setupStep: null, language: null, version: '', ready: false })
 
 // ---------------------------------------------------------------- toasts
 export const toasts = reactive([])

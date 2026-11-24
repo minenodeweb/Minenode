@@ -28,8 +28,8 @@ log = logging.getLogger("minenode")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    auth.bootstrap()
     manager = Manager()
+    manager.migrate_setup_state(has_users=not auth.setup_required())
     manager.backups = BackupManager(manager)
     manager.voice = VoiceProxy(manager, VOICE_HOST, VOICE_PORT)
     manager.proxy = MinecraftProxy(manager, PROXY_HOST, PROXY_PORT, VOICE_HOST, VOICE_PORT)

@@ -1,9 +1,11 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { api } from './api'
 import { auth } from './store'
+import { applyDefaultLocale } from './i18n'
 
 const routes = [
   { path: '/login', name: 'login', component: () => import('./views/Login.vue'), meta: { public: true } },
+  { path: '/setup', name: 'setup', component: () => import('./views/Setup.vue'), meta: { public: true } },
   { path: '/', name: 'dashboard', component: () => import('./views/Dashboard.vue') },
   { path: '/new', name: 'create', component: () => import('./views/CreateServer.vue') },
   { path: '/modpacks', name: 'modpacks', component: () => import('./views/Modpacks.vue') },
@@ -61,7 +63,10 @@ router.beforeEach(async (to) => {
         const s = await api.get('/auth/state')
         auth.user = s.user
         auth.setupRequired = s.setup_required
+        auth.setupStep = s.setup_step || null
+        auth.language = s.language || null
         auth.version = s.version
+        applyDefaultLocale(s.language)
         break
       } catch {
         await new Promise((r) => setTimeout(r, Math.min(4000, 400 * 2 ** attempt)))
@@ -69,6 +74,10 @@ router.beforeEach(async (to) => {
     }
     auth.ready = true
   }
+  // First run: nothing else is usable until the account exists and the panel is configured.
+  if (auth.setupStep === 'account' && to.name !== 'setup') return { name: 'setup' }
+  if (auth.setupStep === 'panel' && auth.user && to.name !== 'setup' && to.name !== 'server-stats') return { name: 'setup' }
+  if (to.name === 'setup' && !auth.setupStep) return { name: auth.user ? 'dashboard' : 'login' }
   if (!to.meta.public && !auth.user) return { name: 'login', query: to.fullPath !== '/' ? { next: to.fullPath } : {} }
   if (to.name === 'login' && auth.user) return { name: 'dashboard' }
 })

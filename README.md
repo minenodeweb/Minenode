@@ -50,7 +50,18 @@ A self-hosted panel for running Minecraft servers. It ships as a single Docker c
 docker compose up -d
 ```
 
-Open `http://<host>:8080`. On first visit a setup wizard asks you to create the administrator account, unless you set `MINENODE_ADMIN_USER` / `MINENODE_ADMIN_PASSWORD`.
+Open `http://<host>:8080`. On first visit a setup wizard (in English by default) walks you through:
+
+1. **Language** – the panel's default language. It also sets the default in-game server list texts (MOTD, version label and kick messages for stopped or starting servers); changing the panel language later never rewrites them – edit them in Settings.
+2. **Administrator account** – your own username and password (no default account; nothing is read from environment variables).
+3. **Domain and ports** – one or more main domains (or set them later) and a reminder to open the ports: `8080/tcp` panel, `25565/tcp` Minecraft Java, `19132/tcp+udp` Bedrock, `24454/udp` Simple Voice Chat.
+4. **Resource packs** – the pack subdomain (`packs` by default) or your own pack hosting URL.
+
+Until the wizard is finished, every page leads back to it; afterwards everything can be changed in **Panel settings**.
+
+#### Forgotten password
+
+Run `reset_password.sh` from the repository on the Docker host (or `docker exec -it minenode reset_password.sh`). It lists the panel users, asks which one to reset and prints a new random 16-character password (no look-alike characters such as `0`/`O` or `1`/`l`). Every session of that user is logged out, and the running panel picks up the change without a restart. Pass the container name and/or a username to skip the questions: `./reset_password.sh minenode admin`.
 
 ![MineNode sign-in screen](docs/screenshots/login.webp)
 
@@ -199,7 +210,6 @@ Some authors block API downloads of their files. MineNode lists those files in t
 | `MINENODE_INTERNAL_PORT_START` | `25600` | First internal game port (assigned automatically) |
 | `MINENODE_INTERNAL_VOICE_PORT_START` | `24500` | First internal voice port (assigned automatically) |
 | `MINENODE_DATA` | `/data` | Data directory |
-| `MINENODE_ADMIN_USER` / `MINENODE_ADMIN_PASSWORD` | – | Account created on first start (instead of the wizard) |
 | `MINENODE_SECURE_COOKIES` | `false` | Send session cookies over HTTPS only |
 | `MINENODE_PICOLIMBO_BINARY` | `/app/bin/pico_limbo` | Path to the compiled PicoLimbo binary (override to run a custom local build) |
 | `MINENODE_TRUSTED_PROXIES` | `127.0.0.1` | Reverse proxies allowed to set `X-Forwarded-For` (comma-separated IPs or CIDR ranges, e.g. `172.16.0.0/12`). Used for the client IP in the login limit |
@@ -301,7 +311,7 @@ API docs (OpenAPI): `http://localhost:8080/api/docs`.
 - Paths in the file manager, modpack archives and backups are checked against directory traversal (zip-slip).
 - Resource pack URLs contain an unguessable token, and the voice ports of individual servers are bound to `127.0.0.1`.
 - Servers start with `-Dlog4j2.formatMsgNoLookups=true` (Log4Shell protection for older versions).
-- If you set `MINENODE_ADMIN_PASSWORD` in a public compose file, change the password in the panel after the first login.
+- There is no default administrator account: the first person to open a fresh panel creates it in the setup wizard, so finish the wizard right after starting the container.
 
 ## Limitations
 
