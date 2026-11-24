@@ -363,6 +363,50 @@ async def inventory(inst: "ServerInstance", check: bool = True) -> dict:
             "mc_version": inst.cfg.mc_version, "dir": content_dir(inst).name}
 
 
+_CHANNEL_RANK = {"release": 0, "beta": 1, "alpha": 2}
+
+
+def _own_loader(installed: dict, compat: list[str]) -> list[str]:
+    """The platform the installed build was made for, in the server's order of preference.
+
+    Projects such as BlueMap publish one file per platform with the same version number
+    (5.29-paper, 5.29-spigot). A Paper server can run the Spigot file too, but it must stay on the
+    Paper one – so updates are looked up only for the most specific platform the installed file has."""
+    own = [l for l in compat if l in (installed.get("loaders") or [])]
+    return own[:1] or list(compat)
+
+
+async def find_updates(installed: dict[str, dict], compat: list[str], mc: str) -> dict[str, dict]:
+    """Newest Modrinth version per file hash: same platform as the installed build, tagged for ``mc``,
+    and never less stable than the installed one (a release is not "updated" to a beta)."""
+    groups: dict[tuple, list[str]] = {}
+    for sha1, v in installed.items():
+        groups.setdefault(tuple(_own_loader(v, compat)), []).append(sha1)
+    found: dict[str, dict] = {}
+    for loaders, hashes in groups.items():
+        got = await net.post_json(f"{MODRINTH}/version_files/update", {
+            "hashes": hashes, "algorithm": "sha1", "loaders": list(loaders), "game_versions": [mc]})
+        found.update(got or {})
+    out: dict[str, dict] = {}
+    for sha1, up in found.items():
+        v = installed.get(sha1)
+        if not v or up.get("id") == v.get("id"):
+            continue
+        allowed = _CHANNEL_RANK.get(v.get("version_type"), 0)
+        if _CHANNEL_RANK.get(up.get("version_type"), 0) > allowed:
+            # Modrinth answers with the newest build of any channel: look for a stable enough one.
+            up = await _stable_update(v, _own_loader(v, compat), mc, allowed)
+        if up and up.get("id") != v.get("id") and (up.get("date_published") or "") > (v.get("date_published") or ""):
+            out[sha1] = up
+    return out
+
+
+async def _stable_update(installed: dict, loaders: list[str], mc: str, allowed: int) -> dict | None:
+    versions = await modrinth_versions(installed["project_id"], mc, loaders)
+    ok = [x for x in versions if _CHANNEL_RANK.get(x.get("version_type"), 0) <= allowed]
+    return ok[0] if ok else None
+
+
 async def _verify(inst: "ServerInstance", items: list[dict]) -> None:
     """Identify files on Modrinth by SHA-1 and check game version + loader. Also finds updates."""
     mc, engine, kind = inst.cfg.mc_version, inst.cfg.type, kind_for(inst.cfg.type)
@@ -377,8 +421,7 @@ async def _verify(inst: "ServerInstance", items: list[dict]) -> None:
         try:
             res["versions"] = await net.post_json(f"{MODRINTH}/version_files",
                                                   {"hashes": hashes, "algorithm": "sha1"})
-            res["updates"] = await net.post_json(f"{MODRINTH}/version_files/update", {
-                "hashes": hashes, "algorithm": "sha1", "loaders": loaders, "game_versions": [mc]})
+            res["updates"] = await find_updates(res["versions"], loaders, mc)
             pids = sorted({v["project_id"] for v in res["versions"].values()})
             if pids:
                 projects = await net.get_json(f"{MODRINTH}/projects", params={"ids": json.dumps(pids)})

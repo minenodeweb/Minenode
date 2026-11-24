@@ -1348,6 +1348,7 @@ const strings = {
   'Panel jest już skonfigurowany – zmiany wprowadzisz w Ustawieniach': 'The panel is already set up – make changes in Settings',
   'Konto': 'Account',
   // Updates tab
+  'Aktualizuj wszystkie': 'Update all',
   'Aktualizacje': 'Updates',
   'Składniki panelu oraz pluginy, mody, datapacki i paczki zasobów wszystkich serwerów w jednym miejscu.': 'Panel components plus the plugins, mods, datapacks and resource packs of every server in one place.',
   'Sprawdź ponownie': 'Check again',

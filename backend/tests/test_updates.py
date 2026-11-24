@@ -206,3 +206,55 @@ def test_components_report_picolimbo_from_the_image(monkeypatch):
     assert pico["update_available"] and pico["latest"] == "1.16.0+mc26.4" and pico["action"] == "image"
     with pytest.raises(ModpackError):
         asyncio.run(updates.update_component(SimpleNamespace(bedrock=None), "picolimbo"))
+
+
+# ---------------------------------------------------------------- choosing the right build on Modrinth
+
+def _v(vid, number, loaders, vtype="release", date="2026-10-10", pid="p"):
+    return {"id": vid, "version_number": number, "loaders": loaders, "version_type": vtype,
+            "date_published": date, "project_id": pid}
+
+
+def test_paper_plugin_is_not_updated_to_the_spigot_build(monkeypatch):
+    installed = {"h1": _v("v29p", "5.29-paper", ["folia", "paper", "purpur"]),
+                 "h2": _v("v28p", "5.28-paper", ["folia", "paper", "purpur"], date="2026-09-25")}
+    asked = []
+
+    async def post_json(url, body, **kw):
+        asked.append(body["loaders"])
+        # Modrinth with "paper" only: the Paper builds. With spigot allowed it would answer 5.29-spigot.
+        assert body["loaders"] == ["paper"]
+        return {h: _v("v29p", "5.29-paper", ["folia", "paper", "purpur"]) for h in body["hashes"]}
+    monkeypatch.setattr(net, "post_json", post_json)
+    out = asyncio.run(content.find_updates(installed, content.LOADER_COMPAT["paper"], "26.3"))
+    assert "h1" not in out  # already the newest Paper build
+    assert out["h2"]["version_number"] == "5.29-paper"
+
+
+def test_a_release_is_not_updated_to_a_beta(monkeypatch):
+    installed = {"h": _v("v22", "0.22.0", ["paper"], date="2026-11-01", pid="lss")}
+
+    async def post_json(url, body, **kw):
+        return {"h": _v("b24", "0.24.0-beta.1", ["paper"], vtype="beta", date="2026-11-24", pid="lss")}
+
+    async def versions(pid, mc, loaders):
+        return [_v("b24", "0.24.0-beta.1", ["paper"], vtype="beta", date="2026-11-24"),
+                _v("v23", "0.23.0", ["paper"], date="2026-11-23")]
+    monkeypatch.setattr(net, "post_json", post_json)
+    monkeypatch.setattr(content, "modrinth_versions", versions)
+    out = asyncio.run(content.find_updates(installed, ["paper", "spigot"], "26.3"))
+    assert out["h"]["version_number"] == "0.23.0"
+    beta = {"h": _v("b23", "0.23.0-beta.2", ["paper"], vtype="beta", date="2026-11-20", pid="lss")}
+    assert asyncio.run(content.find_updates(beta, ["paper"], "26.3"))["h"]["version_number"] == "0.24.0-beta.1"
+
+
+def test_a_spigot_only_plugin_keeps_using_spigot_builds(monkeypatch):
+    installed = {"h": _v("old", "1.0", ["bukkit", "spigot"], date="2026-01-01")}
+    asked = []
+
+    async def post_json(url, body, **kw):
+        asked.append(body["loaders"])
+        return {"h": _v("new", "1.1", ["bukkit", "spigot"], date="2026-02-01")}
+    monkeypatch.setattr(net, "post_json", post_json)
+    out = asyncio.run(content.find_updates(installed, content.LOADER_COMPAT["paper"], "1.21.4"))
+    assert asked == [["spigot"]] and out["h"]["version_number"] == "1.1"

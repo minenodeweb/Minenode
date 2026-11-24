@@ -66,7 +66,7 @@
               <span v-else-if="state[s.id]?.data" class="badge green"><Check class="bi" /> {{ $t('aktualne') }}</span>
               <button class="btn sm" :class="{ primary: state[s.id]?.data?.available }" :disabled="!state[s.id]?.data?.available || state[s.id]?.applying"
                       @click.stop="apply(s, null)">
-                <Loader2 v-if="state[s.id]?.applying" class="spin" /><Download v-else /> {{ $t('Aktualizuj') }}</button>
+                <Loader2 v-if="state[s.id]?.applying === 'all'" class="spin" /><Download v-else /> {{ $t('Aktualizuj wszystkie') }}</button>
             </div>
 
             <div v-if="open[s.id]" class="srv-body">
@@ -75,12 +75,9 @@
                 <div v-if="!state[s.id].data.items.length" class="small muted">{{ $t('Ten serwer nie ma pluginów, modów, datapacków ani paczek zasobów.') }}</div>
                 <div v-for="g in groups(state[s.id].data.items)" :key="g.kind" class="group">
                   <div class="group-head">
-                    <label v-if="g.updatable.length" class="check"><input type="checkbox" :checked="g.updatable.every((i) => picked[s.id]?.has(i.id))"
-                                                                         @change="pickAll(s.id, g.updatable, $event.target.checked)" /></label>
                     <span class="small"><b>{{ $t(KIND[g.kind]) }}</b> <span class="muted">· {{ g.items.length }}</span></span>
                   </div>
                   <div v-for="it in g.items" :key="it.id" class="item" :class="{ skip: it.skip, off: !it.enabled }">
-                    <label class="check"><input type="checkbox" :disabled="!it.update_available" :checked="picked[s.id]?.has(it.id)" @change="pick(s.id, it.id, $event.target.checked)" /></label>
                     <img v-if="it.icon" :src="it.icon" class="pic" alt="" referrerpolicy="no-referrer" loading="lazy" @error="(e) => (e.target.style.visibility = 'hidden')" />
                     <div v-else class="pic ph"><Package /></div>
                     <div class="grow col" style="gap: 2px; min-width: 0">
@@ -98,13 +95,11 @@
                         <template v-else> · {{ $t('aktualny') }}</template>
                       </div>
                     </div>
+                    <button v-if="it.update_available" class="btn sm" :disabled="!!state[s.id].applying" @click="apply(s, [it.id], it)">
+                      <Loader2 v-if="state[s.id].applying === it.id" class="spin" /><Download v-else /> {{ $t('Aktualizuj') }}</button>
                   </div>
                 </div>
-                <div class="row wrap" style="gap: 8px; justify-content: flex-end">
-                  <span v-if="state[s.id].data.errors.length" class="tiny muted grow">{{ state[s.id].data.errors.join(' · ') }}</span>
-                  <button class="btn sm" :disabled="!picked[s.id]?.size || state[s.id].applying" @click="apply(s, [...picked[s.id]])">
-                    <Download /> {{ $t('Aktualizuj wybrane ({n})', { n: picked[s.id]?.size || 0 }) }}</button>
-                </div>
+                <div v-if="state[s.id].data.errors.length" class="tiny muted">{{ state[s.id].data.errors.join(' · ') }}</div>
               </template>
             </div>
 
@@ -133,7 +128,6 @@ const components = ref(null)
 const servers = ref(null)
 const state = reactive({})   // server id -> { loading, data, error, applying, restart }
 const open = reactive({})
-const picked = reactive({})  // server id -> Set of item ids
 const busy = reactive({})
 const geyser = reactive({ channel: 'stable', pr: '' })
 const checking = ref(false)
@@ -164,8 +158,6 @@ async function checkServer(id, refresh = false) {
   st.error = null
   try {
     st.data = await api.get(`/updates/servers/${id}${refresh ? '?refresh=true' : ''}`)
-    const keep = new Set((st.data.items || []).filter((i) => i.update_available).map((i) => i.id))
-    picked[id] = new Set([...(picked[id] || [])].filter((x) => keep.has(x)))
   } catch (e) { st.error = e.message } finally { st.loading = false }
 }
 
@@ -188,35 +180,25 @@ onMounted(() => load())
 const refreshAll = () => load(true)
 
 function toggle(id) { open[id] = !open[id] }
-function pick(id, itemId, on) {
-  const set = new Set(picked[id] || [])
-  on ? set.add(itemId) : set.delete(itemId)
-  picked[id] = set
-}
-function pickAll(id, items, on) {
-  const set = new Set(picked[id] || [])
-  for (const i of items) on ? set.add(i.id) : set.delete(i.id)
-  picked[id] = set
-}
-
-async function apply(s, ids) {
+// ids = null: every available update of the server ("Aktualizuj wszystkie", confirmed first);
+// one id: the single file whose "Aktualizuj" button was pressed.
+async function apply(s, ids, item = null) {
   const st = state[s.id]
   const n = ids ? ids.length : st?.data?.available
-  if (!n) return
-  if (!(await confirmDialog({
+  if (!n || st.applying) return
+  if (!item && !(await confirmDialog({
     title: t('Zaktualizować pliki ({n}) na serwerze {s}?', { n, s: s.name }),
     message: t('Panel pobierze nowe wersje z Modrinth i podmieni stare pliki. Wyłączone pliki pozostaną wyłączone. Warto mieć świeżą kopię zapasową.'),
-    confirmText: t('Aktualizuj'),
+    confirmText: t('Aktualizuj wszystkie'),
   }))) return
-  st.applying = true
+  st.applying = item ? item.id : 'all'
   try {
     const r = await api.post(`/updates/servers/${s.id}`, { items: ids })
     st.data = r.server
-    picked[s.id] = new Set()
     if (r.restart_required) st.restart = true
     if (r.failed.length) toast(t('Zaktualizowano {ok}, nieudane: {bad} – szczegóły w konsoli serwera', { ok: r.updated.length, bad: r.failed.length }), 'error', 6000)
     else toast(t('Zaktualizowano pliki: {n}', { n: r.updated.length }), 'success')
-  } catch (e) { toastError(e) } finally { st.applying = false }
+  } catch (e) { toastError(e) } finally { st.applying = null }
 }
 
 async function restart(s) {
@@ -277,9 +259,6 @@ async function setChannel(channel) {
 .item.skip .title, .item.skip .pic { opacity: 0.6; }
 .title { font-size: 13.5px; font-weight: 550; }
 .new { color: var(--warn); }
-.check { display: inline-flex; width: 16px; flex: none; }
-.check input { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; }
-.check input:disabled { cursor: default; opacity: 0.35; }
 .pic { width: 30px; height: 30px; border-radius: 7px; object-fit: cover; background: var(--surface-3); flex: none; image-rendering: pixelated; }
 .pic.ph { display: grid; place-items: center; color: var(--muted); }
 .pic.ph svg { width: 15px; height: 15px; }
