@@ -26,7 +26,7 @@ from starlette.websockets import WebSocketDisconnect
 from . import storage as storage_mod
 from . import bedrock_compat, datapacks as dpacks, packs, worldgen
 from . import auth, auth_sessions, content, files, java as javamod, modpacks, players as pl, providers, resourcepacks as rpacks, voice
-from . import chunky, itemicons, lod, playerstats, squaremap, webmap
+from . import chunky, itemicons, lod, playerstats, squaremap, updates, webmap
 from .models import ChunkySettings
 from .backups import safe_extract
 from .config import BEDROCK_PORT, DATA_DIR, PROXY_PORT, SECURE_COOKIES, TMP_DIR, VERSION, CURSEFORGE_API_KEY_ENV
@@ -161,6 +161,48 @@ async def remove_user(username: str, me: str = Depends(auth.require_user)):
         raise HTTPException(400, "Nie możesz usunąć własnego konta")
     auth.delete_user(username)
     return {"ok": True}
+
+
+# ====================================================================== updates (the "Aktualizacje" tab)
+
+@router.get("/updates/components")
+async def updates_components(refresh: bool = False, _: str = Depends(auth.require_user)):
+    """Versions of what the panel runs itself (Geyser, PicoLimbo, …) and whether a newer one exists."""
+    return await updates.components(manager, refresh=refresh)
+
+
+@router.post("/updates/components/{cid}")
+@run_errors
+async def updates_component_update(cid: str, _: str = Depends(auth.require_user)):
+    result = await updates.update_component(manager, cid)
+    return {**result, "components": await updates.components(manager)}
+
+
+@router.get("/updates/servers")
+async def updates_servers(_: str = Depends(auth.require_user)):
+    """The servers to check; each one's files are fetched separately (Modrinth calls per server)."""
+    return [{"id": i.cfg.id, "name": i.cfg.name, "type": i.cfg.type, "mc_version": i.cfg.mc_version,
+             "installed": i.cfg.installed, "running": bool(i.running)} for i in manager.instances.values()]
+
+
+@router.get("/updates/servers/{sid}")
+@run_errors
+async def updates_server(sid: str, refresh: bool = False, _: str = Depends(auth.require_user)):
+    return await updates.server_updates(inst_or_404(sid), refresh=refresh)
+
+
+class UpdateApplyBody(BaseModel):
+    items: Optional[list[str]] = Field(default=None, max_length=500)  # None = every available update
+
+
+@router.post("/updates/servers/{sid}")
+@run_errors
+async def updates_server_apply(sid: str, body: UpdateApplyBody, _: str = Depends(auth.require_user)):
+    inst = inst_or_404(sid)
+    if inst.state == "installing":
+        raise HTTPException(400, "Poczekaj na zakończenie instalacji serwera")
+    result = await updates.apply(inst, body.items, cf_key())
+    return {**result, "server": await updates.server_updates(inst)}
 
 
 # ====================================================================== player authentication

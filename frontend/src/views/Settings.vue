@@ -101,15 +101,8 @@
           <div class="channel col" style="gap: 10px">
             <div class="row wrap" style="gap: 10px">
               <b class="small">{{ $t('Wersja Geysera') }}</b>
-              <div class="seg">
-                <button type="button" :class="{ active: channel.channel === 'stable' }" :disabled="channelBusy" @click="setChannel('stable')">{{ $t('Stabilna') }}</button>
-                <button type="button" :class="{ active: channel.channel === 'preview' }" :disabled="channelBusy" @click="setChannel('preview')">{{ $t('Testowa (PR)') }}</button>
-              </div>
-              <template v-if="channel.channel === 'preview'">
-                <span class="small text-2">PR #</span>
-                <input v-model="channel.pr" class="input mono pr" inputmode="numeric" maxlength="6" @keydown.enter.prevent="setChannel('preview')" />
-                <button type="button" class="btn sm" :disabled="channelBusy || channel.pr === currentPr" @click="setChannel('preview')">{{ $t('Zastosuj') }}</button>
-              </template>
+              <span class="small">{{ channel.channel === 'preview' ? $t('testowa PR #{n}', { n: currentPr || channel.pr }) : $t('stabilna') }}</span>
+              <router-link to="/updates" class="small">{{ $t('Zmień lub zaktualizuj w Aktualizacjach') }} →</router-link>
               <Loader2 v-if="channelBusy" class="spin" style="width: 16px" />
             </div>
             <Toggle :model-value="geyser.integrated_pack" :disabled="channelBusy" :label="$t('Paczka zasobów Geysera dla graczy Bedrock')"
@@ -327,23 +320,6 @@ function applyGeyserState(r) {
     channel.channel = r.channel
     channel.pr = currentPr.value = String(r.preview || 'pr.6873').replace(/^pr\./, '')
   }
-}
-async function setChannel(ch) {
-  if (ch === 'preview' && !/^[0-9]{1,6}$/.test(String(channel.pr).trim())) { toast('Podaj numer PR Geysera, np. 6873', 'error'); return }
-  if (ch === channel.channel && (ch === 'stable' || channel.pr === currentPr.value)) return
-  if (ch === 'preview' && !(await confirmDialog({
-    title: 'Przełączyć na testową wersję Geysera?',
-    message: 'Panel pobierze kompilację testową z PR i zrestartuje bramkę Bedrock – gracze Bedrock zostaną na chwilę rozłączeni. Serwery Java działają dalej. Do wersji stabilnej wrócisz jednym kliknięciem.',
-    confirmText: 'Przełącz',
-  }))) return
-  channelBusy.value = true
-  try {
-    const r = await api.put('/bedrock/geyser', { channel: ch, preview: ch === 'preview' ? String(channel.pr).trim() : undefined })
-    channel.channel = r.channel
-    currentPr.value = channel.pr = String(r.preview).replace(/^pr\./, '')
-    applyGeyserState(r)
-    toast(ch === 'preview' ? 'Pobieranie testowej wersji Geysera…' : 'Powrót do stabilnej wersji Geysera…', 'success')
-  } catch (e) { toastError(e) } finally { channelBusy.value = false }
 }
 async function setIntegratedPack(on) {
   channelBusy.value = true

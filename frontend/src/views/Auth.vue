@@ -48,7 +48,8 @@
             <div><span class="muted small">{{ $t('Czas sesji') }}</span><span>{{ lobby?.session_minutes || 30 }} min</span></div>
             <div><span class="muted small">{{ $t('Zarejestrowani gracze') }}</span><span>{{ playerAccounts.length }}</span></div>
             <div v-if="pico"><span class="muted small">PicoLimbo</span>
-              <span class="mono">{{ pico.source === 'local' && !pico.version ? $t('lokalna binarka') : (pico.version || '—') }}</span>
+              <span><span class="mono">{{ pico.source === 'local' && !pico.version ? $t('lokalna binarka') : (pico.version || '—') }}</span>
+                · <router-link to="/updates" class="small">{{ $t('Aktualizacje') }}</router-link></span>
             </div>
           </div>
 

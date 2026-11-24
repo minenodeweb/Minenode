@@ -94,6 +94,7 @@ def test_creating_or_deleting_servers_never_picks_a_default_server(tmp_path, mon
     m.instances = {}
     m.bedrock = None
     m.backups = None
+    m.voice = None
     saved = []
     m.save_settings = lambda s: (saved.append(s.default_server_id), m.settings_store.data.update(s.model_dump()))
     m.save_server = lambda cfg: m.servers_store.data.__setitem__(cfg.id, cfg.model_dump())

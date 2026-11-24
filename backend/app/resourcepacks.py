@@ -208,8 +208,30 @@ async def install_modrinth(inst: "ServerInstance", project_id: str, version_id: 
     inst.panel_log(f"Pobieranie paczki zasobów {project['title']} {v['version_number']}…")
     await net.download(f["url"], tmp, sha1=f.get("hashes", {}).get("sha1"))
     return add_file(inst, tmp, project["title"], "modrinth", {
-        "project_id": v["project_id"], "version": v["version_number"], "icon_url": project.get("icon_url"),
+        "project_id": v["project_id"], "version": v["version_number"], "version_id": v["id"],
+        "icon_url": project.get("icon_url"),
         "game_versions": v.get("game_versions", [])[-4:]})
+
+
+async def update_modrinth(inst: "ServerInstance", m: "Manager", pid: str, version_id: str) -> dict:
+    """Replace a pack installed by the panel with a newer Modrinth version.
+
+    If the old pack was the one sent to players, the new one is activated with the same
+    "required" flag and prompt, so players get the update on their next join."""
+    old, _ = get(inst, pid)
+    props = read_properties(inst.dir / "server.properties")
+    was_active = active_id(inst, m) == pid
+    require = props.get("require-resource-pack", "false") == "true"
+    prompt = ""
+    try:
+        prompt = json.loads(props.get("resource-pack-prompt") or "{}").get("text", "")
+    except (ValueError, AttributeError):
+        prompt = ""
+    new = await install_modrinth(inst, old.get("project_id") or "", version_id)
+    if was_active:
+        activate(inst, m, new["id"], require, prompt)
+    delete(inst, m, pid)
+    return {**new, "previous": old.get("version"), "activated": was_active}
 
 
 async def install_curseforge(inst: "ServerInstance", api_key: str, mod_id: str) -> dict:

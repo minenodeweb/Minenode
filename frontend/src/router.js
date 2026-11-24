@@ -8,6 +8,7 @@ const routes = [
   { path: '/new', name: 'create', component: () => import('./views/CreateServer.vue') },
   { path: '/modpacks', name: 'modpacks', component: () => import('./views/Modpacks.vue') },
   { path: '/auth', name: 'auth', component: () => import('./views/Auth.vue') },
+  { path: '/updates', name: 'updates', component: () => import('./views/Updates.vue') },
   { path: '/settings', name: 'settings', component: () => import('./views/Settings.vue') },
   { path: '/:key/stats', name: 'server-stats', component: () => import('./views/PublicStats.vue'), meta: { public: true } },
   {

@@ -188,7 +188,36 @@ async def install_modrinth(inst: "ServerInstance", project_id: str) -> dict:
     await net.download(f["url"], tmp, sha1=f.get("hashes", {}).get("sha1"))
     return add_file(inst, tmp, f["filename"], {
         "source": "modrinth", "title": project["title"], "project_id": v["project_id"],
-        "version": v["version_number"], "icon_url": project.get("icon_url")})
+        "version": v["version_number"], "version_id": v["id"], "icon_url": project.get("icon_url")})
+
+
+async def update_modrinth(inst: "ServerInstance", file: str, version: dict) -> dict:
+    """Replace a datapack installed from Modrinth with ``version`` (a Modrinth version object).
+
+    The new file keeps the old one's place: an enabled pack stays enabled, a disabled one disabled."""
+    old, enabled = _find(inst, file)
+    zips = [f for f in version.get("files", []) if f.get("filename", "").lower().endswith(".zip")]
+    if not zips:
+        raise DatapackError("Ta wersja nie zawiera datapacka (.zip)")
+    f = next((x for x in zips if x.get("primary")), zips[0])
+    project = await net.get_json(f"{MODRINTH}/project/{version['project_id']}")
+    TMP_DIR.mkdir(parents=True, exist_ok=True)
+    tmp = TMP_DIR / f"dp-{int(time.time() * 1000)}.zip"
+    inst.panel_log(f"Aktualizacja datapacka {project['title']} do {version['version_number']}…")
+    await net.download(f["url"], tmp, sha1=f.get("hashes", {}).get("sha1"))
+    meta_before = _load_meta(inst).get(file, {})
+    pack = add_file(inst, tmp, f["filename"], {
+        "source": "modrinth", "title": project["title"], "project_id": version["project_id"],
+        "version": version["version_number"], "version_id": version["id"], "icon_url": project.get("icon_url")})
+    if pack["file"] != file:
+        if old.exists():  # the update came with another file name: drop the old copy
+            shutil.rmtree(old) if old.is_dir() else old.unlink()
+        meta = _load_meta(inst)
+        meta.pop(file, None)
+        _save_meta(inst, meta)
+    if not enabled:
+        toggle(inst, pack["file"], False)
+    return {**pack, "previous": meta_before.get("version")}
 
 
 def toggle(inst: "ServerInstance", file: str, enabled: bool) -> None:
