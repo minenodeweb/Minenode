@@ -163,7 +163,7 @@ def test_upstream_failed_releases_lobby_gate(tmp_path, monkeypatch):
 
 def test_http_request_serves_resource_pack_file_and_rejects_bad_tokens(tmp_path):
     inst = _make_inst(tmp_path)
-    rp_dir = tmp_path / ".minenode" / "resourcepacks"
+    rp_dir = tmp_path / ".varden" / "resourcepacks"
     rp_dir.mkdir(parents=True)
     pack_id = "0123456789ab"
     token = "secret_token_123"

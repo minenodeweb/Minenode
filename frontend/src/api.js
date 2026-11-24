@@ -8,7 +8,7 @@ export class ApiError extends Error {
 }
 
 async function request(method, url, body, { raw = false, form = false } = {}) {
-  const headers = { 'X-Requested-With': 'minenode' }
+  const headers = { 'X-Requested-With': 'varden' }
   let payload
   if (body !== undefined) {
     if (form) payload = body
@@ -20,7 +20,7 @@ async function request(method, url, body, { raw = false, form = false } = {}) {
   const res = await fetch('/api' + url, { method, headers, body: payload, credentials: 'same-origin' })
   if (res.status === 401 && !url.startsWith('/auth')) {
     auth.user = null
-    window.dispatchEvent(new CustomEvent('minenode:unauthorized'))
+    window.dispatchEvent(new CustomEvent('varden:unauthorized'))
   }
   if (!res.ok) {
     let msg = res.statusText
@@ -49,7 +49,7 @@ export function uploadWithProgress(url, formData, onProgress) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest()
     xhr.open('POST', '/api' + url)
-    xhr.setRequestHeader('X-Requested-With', 'minenode')
+    xhr.setRequestHeader('X-Requested-With', 'varden')
     xhr.upload.onprogress = (e) => e.lengthComputable && onProgress?.(e.loaded / e.total)
     xhr.onload = () => {
       let data = null

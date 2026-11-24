@@ -24,7 +24,7 @@ from .modpacks import MODRINTH, ModpackError
 if TYPE_CHECKING:
     from .manager import Manager, ServerInstance
 
-log = logging.getLogger("minenode.updates")
+log = logging.getLogger("varden.updates")
 
 CACHE_TTL = 600.0
 PANEL_SOURCES = ("modrinth", "curseforge")  # installed by the panel; anything else counts as uploaded
@@ -89,10 +89,10 @@ async def components(m: "Manager", refresh: bool = False) -> list[dict]:
             "testing": project == GEYSER_PREVIEW_PROJECT,
         })
         out.append({
-            "id": "bedrock_router", "title": "Router Bedrock MineNode", "url": None,
+            "id": "bedrock_router", "title": "Router Bedrock Varden", "url": None,
             "about": "Rozszerzenie Geysera kierujące graczy Bedrock na właściwy serwer.",
             "version": ROUTER_VERSION, "latest": ROUTER_VERSION, "update_available": False, "installed": True,
-            "action": "image", "note": "Budowane razem z obrazem MineNode – aktualizuje się z nowym obrazem.",
+            "action": "image", "note": "Budowane razem z obrazem Varden – aktualizuje się z nowym obrazem.",
         })
     pico = picolimbo.status()
     upstream = await _github_latest(pico.get("repo") or picolimbo.REPO, refresh)
@@ -103,8 +103,8 @@ async def components(m: "Manager", refresh: bool = False) -> list[dict]:
         "version": pico.get("version"), "latest": picolimbo.display_version(upstream),
         "update_available": bool(current and upstream and current != upstream),
         "installed": bool(pico.get("version")), "action": "local" if pico.get("source") == "local" else "image",
-        "note": ("Lokalna binarka (MINENODE_PICOLIMBO_BINARY) – panel jej nie zmienia." if pico.get("source") == "local"
-                 else "Kompilowane z kodu autora przy budowaniu obrazu MineNode – nowa wersja trafia do panelu "
+        "note": ("Lokalna binarka (VARDEN_PICOLIMBO_BINARY) – panel jej nie zmienia." if pico.get("source") == "local"
+                 else "Kompilowane z kodu autora przy budowaniu obrazu Varden – nowa wersja trafia do panelu "
                       "razem z nowym obrazem."),
     })
     return out
@@ -119,7 +119,7 @@ async def update_component(m: "Manager", cid: str) -> dict:
             raise ModpackError("Włącz Bedrock dla któregoś serwera – Geyser pobiera się dopiero wtedy")
         bedrock.recheck_geyser()  # downloads the newest build of the chosen channel and restarts Geyser
         return {"started": True}
-    raise ModpackError("Ten składnik aktualizuje się razem z obrazem Docker MineNode")
+    raise ModpackError("Ten składnik aktualizuje się razem z obrazem Docker Varden")
 
 
 # ====================================================================== server content

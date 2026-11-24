@@ -60,7 +60,7 @@ def test_disable_moves_out_of_the_world_and_back(tmp_path):
     assert [p["file"] for p in datapacks.list_packs(inst)] == ["a.zip"]
 
 
-@pytest.mark.parametrize("bad", ["../server.properties", "a/b.zip", "..", ".minenode", ""])
+@pytest.mark.parametrize("bad", ["../server.properties", "a/b.zip", "..", ".varden", ""])
 def test_names_cannot_escape_the_folder(tmp_path, bad):
     inst, _ = make_inst(tmp_path)
     with pytest.raises(datapacks.DatapackError):

@@ -1,4 +1,4 @@
-package pl.minenode.router;
+package pl.varden.router;
 
 import org.geysermc.geyser.api.network.AuthType;
 import org.geysermc.geyser.api.network.RemoteServer;

@@ -22,7 +22,7 @@ PNG = (
 def _inst(tmp_path, *, sid="srv"):
     mods = tmp_path / "mods"
     mods.mkdir(parents=True, exist_ok=True)
-    rp = tmp_path / ".minenode" / "resourcepacks"
+    rp = tmp_path / ".varden" / "resourcepacks"
     rp.mkdir(parents=True, exist_ok=True)
     return SimpleNamespace(
         dir=tmp_path,
@@ -149,7 +149,7 @@ def test_mod_and_resource_pack_override_blocks_and_items(_isolate):
     _jar(inst.dir / "mods" / "create.jar", {
         "assets/create/textures/item/andesite_alloy.png": _png_bytes((150, 160, 155, 255)),
     })
-    _jar(inst.dir / ".minenode" / "resourcepacks" / "pack.zip", {
+    _jar(inst.dir / ".varden" / "resourcepacks" / "pack.zip", {
         "assets/minecraft/textures/block/stone.png": _png_bytes((255, 0, 0, 255)),
         "assets/minecraft/textures/item/diamond_pickaxe.png": _png_bytes((0, 255, 0, 255)),
     })

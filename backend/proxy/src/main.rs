@@ -46,28 +46,28 @@ async fn wait_signal() {
 
 #[tokio::main]
 async fn main() -> ExitCode {
-    let ipc_addr = match env::var("MINENODE_IPC_ADDR") {
+    let ipc_addr = match env::var("VARDEN_IPC_ADDR") {
         Ok(v) if !v.is_empty() => v,
         _ => {
-            eprintln!("[minenode-proxy] MINENODE_IPC_ADDR is required");
+            eprintln!("[varden-proxy] VARDEN_IPC_ADDR is required");
             return ExitCode::from(2);
         }
     };
-    let ipc_token = match env::var("MINENODE_IPC_TOKEN") {
+    let ipc_token = match env::var("VARDEN_IPC_TOKEN") {
         Ok(v) if !v.is_empty() => v,
         _ => {
-            eprintln!("[minenode-proxy] MINENODE_IPC_TOKEN is required");
+            eprintln!("[varden-proxy] VARDEN_IPC_TOKEN is required");
             return ExitCode::from(2);
         }
     };
-    let tcp_bind = env::var("MINENODE_TCP_BIND").unwrap_or_else(|_| "0.0.0.0:25565".to_string());
-    let udp_bind = env::var("MINENODE_UDP_BIND").unwrap_or_else(|_| "0.0.0.0:24454".to_string());
+    let tcp_bind = env::var("VARDEN_TCP_BIND").unwrap_or_else(|_| "0.0.0.0:25565".to_string());
+    let udp_bind = env::var("VARDEN_UDP_BIND").unwrap_or_else(|_| "0.0.0.0:24454".to_string());
 
     let shutdown = Arc::new(Notify::new());
     let (ipc, ipc_read) = match IpcClient::connect(&ipc_addr, &ipc_token, shutdown.clone()).await {
         Ok(pair) => pair,
         Err(e) => {
-            eprintln!("[minenode-proxy] IPC connection failed: {e}");
+            eprintln!("[varden-proxy] IPC connection failed: {e}");
             return ExitCode::from(1);
         }
     };
@@ -82,7 +82,7 @@ async fn main() -> ExitCode {
             (Some(l), port)
         }
         Err(e) => {
-            eprintln!("[minenode-proxy] TCP bind {tcp_bind} failed: {e}");
+            eprintln!("[varden-proxy] TCP bind {tcp_bind} failed: {e}");
             tcp_state.set_error(Some(e.to_string()));
             (None, parse_port_hint(&tcp_bind, 25565))
         }
@@ -95,7 +95,7 @@ async fn main() -> ExitCode {
             (Some(s), port)
         }
         Err(e) => {
-            eprintln!("[minenode-proxy] UDP bind {udp_bind} failed: {e}");
+            eprintln!("[varden-proxy] UDP bind {udp_bind} failed: {e}");
             voice_state.set_error(Some(e.to_string()));
             (None, parse_port_hint(&udp_bind, 24454))
         }

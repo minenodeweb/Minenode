@@ -73,7 +73,7 @@
       <div class="card-head"><AlertOctagon class="hi" /><h3>{{ $t('Strefa niebezpieczna') }}</h3></div>
       <div class="card-body row wrap">
         <div class="grow"><b>{{ $t('Usuń serwer') }}</b><div class="small muted">{{ $t('Usuwa pliki serwera i jego kopie na dysku panelu. Nieodwracalne.') }}</div></div>
-        <button class="btn" :disabled="exporting || live.summary.state === 'online'" @click="exportServer"><Download /> {{ exporting ? $t('Eksportowanie…') : $t('Eksportuj .minenodepack') }}</button>
+        <button class="btn" :disabled="exporting || live.summary.state === 'online'" @click="exportServer"><Download /> {{ exporting ? $t('Eksportowanie…') : $t('Eksportuj .vardenpack') }}</button>
         <button class="btn danger" @click="remove"><Trash2 /> {{ $t('Usuń serwer') }}</button>
       </div>
     </section>

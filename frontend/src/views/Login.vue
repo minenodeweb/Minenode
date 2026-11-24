@@ -5,7 +5,7 @@
       <div class="row" style="gap: 12px; margin-bottom: 26px">
         <BrandMark />
         <div>
-          <div style="font-weight: 650; font-size: 17px">MineNode</div>
+          <div style="font-weight: 650; font-size: 17px">Varden</div>
           <div class="small muted">{{ $t('Panel zarządzania serwerami Minecraft') }}</div>
         </div>
       </div>

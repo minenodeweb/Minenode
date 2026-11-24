@@ -1,7 +1,7 @@
 services:
-  minenode:
-    image: zzabek/minenode:latest
-    container_name: minenode
+  varden:
+    image: zzabek/varden:latest
+    container_name: varden
     restart: unless-stopped
     ports:
       - "8080:8080"           # Web panel, API and WebSocket (HTTP)
@@ -10,7 +10,7 @@ services:
       - "19132:19132/tcp"     # Bedrock Edition (Geyser): NetherNet signaling – players find the server here
       - "19132:19132/udp"     # Bedrock Edition (Geyser): gameplay traffic
     volumes:
-      - minenode-data:/data
+      - varden-data:/data
       # Optional backup destination on a NAS / second disk – add it in Panel settings → Backup destinations:
       # - /mnt/nas/minecraft-backups:/backups/nas
     environment:
@@ -20,11 +20,11 @@ services:
       # CurseForge API key (can also be set in the panel):
       # CURSEFORGE_API_KEY: ""
       # Set to "true" when the panel is served over HTTPS:
-      MINENODE_SECURE_COOKIES: "false"
+      VARDEN_SECURE_COOKIES: "false"
       # Behind a reverse proxy: its IP or network range, so the panel sees real client IPs:
-      # MINENODE_TRUSTED_PROXIES: "172.16.0.0/12"
+      # VARDEN_TRUSTED_PROXIES: "172.16.0.0/12"
       # Optional: Bedrock gamertags allowed to keep a refreshed Microsoft login token.
-      # MINENODE_BEDROCK_SAVED_LOGINS: "PlayerOne,PlayerTwo"
+      # VARDEN_BEDROCK_SAVED_LOGINS: "PlayerOne,PlayerTwo"
     # Gives servers time to save their worlds when the container stops
     stop_grace_period: 2m
     ulimits:
@@ -36,4 +36,4 @@ services:
     #       memory: 16g
 
 volumes:
-  minenode-data:
+  varden-data:

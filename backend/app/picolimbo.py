@@ -1,10 +1,10 @@
 """PicoLimbo for the authentication lobby: compiled during the Docker build.
 
 PicoLimbo (https://github.com/Quozul/PicoLimbo) is fetched and compiled in its own Dockerfile
-build stage with MineNode's login patch (``assets/picolimbo/minenode-auth.patch``) and copied
+build stage with Varden's login patch (``assets/picolimbo/varden-auth.patch``) and copied
 into the runtime image at ``/app/bin/pico_limbo`` together with ``picolimbo-version.json``.
 No PicoLimbo source files live in this repository, and no compiler or Rust toolchain runs in the
-runtime container. ``MINENODE_PICOLIMBO_BINARY`` overrides the bundled binary path.
+runtime container. ``VARDEN_PICOLIMBO_BINARY`` overrides the bundled binary path.
 """
 from __future__ import annotations
 
@@ -16,13 +16,13 @@ from pathlib import Path
 
 from .config import AUTH_LOBBY_DIR, PICOLIMBO_BIN, PICOLIMBO_META
 
-log = logging.getLogger("minenode.picolimbo")
+log = logging.getLogger("varden.picolimbo")
 
-REPO = os.environ.get("MINENODE_PICOLIMBO_REPO", "Quozul/PicoLimbo")
-PATCH = Path(__file__).parent / "assets" / "picolimbo" / "minenode-auth.patch"
+REPO = os.environ.get("VARDEN_PICOLIMBO_REPO", "Quozul/PicoLimbo")
+PATCH = Path(__file__).parent / "assets" / "picolimbo" / "varden-auth.patch"
 BINARY = PICOLIMBO_BIN
 VERSION_FILE = PICOLIMBO_META
-LOCAL_OVERRIDE = os.environ.get("MINENODE_PICOLIMBO_BINARY")
+LOCAL_OVERRIDE = os.environ.get("VARDEN_PICOLIMBO_BINARY")
 _LEGACY_DIRS = ("rust", "build", "bin")
 
 
@@ -63,10 +63,10 @@ def binary() -> Path:
     if bin_path.is_file():
         return bin_path
     if LOCAL_OVERRIDE:
-        raise PicoLimboError(f"MINENODE_PICOLIMBO_BINARY wskazuje na nieistniejący plik: {bin_path}")
+        raise PicoLimboError(f"VARDEN_PICOLIMBO_BINARY wskazuje na nieistniejący plik: {bin_path}")
     raise PicoLimboError(
         f"Brak skompilowanego pliku PicoLimbo: {bin_path} "
-        "(zbuduj obraz Docker MineNode lub ustaw MINENODE_PICOLIMBO_BINARY)"
+        "(zbuduj obraz Docker Varden lub ustaw VARDEN_PICOLIMBO_BINARY)"
     )
 
 

@@ -1,15 +1,15 @@
-MineNode
+Varden
 Copyright 2026 Bernard Wieczorek and Piotr Janaszak
-https://github.com/minenodeweb/Minenode
+https://github.com/Varden-app/Varden
 
 This product includes software developed by Bernard Wieczorek and
-Piotr Janaszak as part of the MineNode project.
+Piotr Janaszak as part of the Varden project.
 
 Licensed under the Apache License, Version 2.0 (see the LICENSE file).
 
 Attribution requirement
 -----------------------
-You may use, modify and redistribute MineNode, also commercially. Any copy
+You may use, modify and redistribute Varden, also commercially. Any copy
 or derivative work you distribute (source code, Docker image or a hosted
 panel offered to others) must keep this NOTICE file, or reproduce its
 contents in the documentation or in a place where third-party notices are
@@ -18,14 +18,14 @@ repository. Changed files must state that you changed them.
 
 Third-party software
 --------------------
-The MineNode Docker image is built with PicoLimbo by Quozul
+The Varden Docker image is built with PicoLimbo by Quozul
 (https://github.com/Quozul/PicoLimbo), MIT License, compiled from the
-author's release with MineNode's login patch; its license is shipped in
+author's release with Varden's login patch; its license is shipped in
 the image at /app/licenses/PICOLIMBO-LICENSE.
 
 Game servers, plugins and mods (Paper, Purpur, Fabric, Quilt, Forge,
 NeoForge, Geyser, squaremap, Dynmap, BlueMap, Distant Horizons, LOD Server
 Support, SkinsRestorer, Simple Voice Chat, Chunky, C2ME, ViaVersion,
-ViaFabric, Fabric API and others) are not part of this repository. MineNode
+ViaFabric, Fabric API and others) are not part of this repository. Varden
 downloads them from their official sources on the user's machine, and each
 stays under its own license.

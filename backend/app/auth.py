@@ -16,7 +16,14 @@ from .config import PANEL_DIR
 from .models import User
 from .store import JsonStore
 
-COOKIE = "minenode_session"
+COOKIE = "varden_session"
+OLD_COOKIE = "minenode_session"  # before the rename to Varden – still accepted, so nobody is logged out
+
+
+def session_token(cookies) -> str | None:
+    return cookies.get(COOKIE) or cookies.get(OLD_COOKIE)
+
+
 SESSION_TTL = 14 * 24 * 3600
 
 _users = JsonStore(PANEL_DIR / "users.json", dict, follow_file=True)  # reset_password.sh edits it from outside
@@ -210,7 +217,7 @@ def revoke_token(token: str | None) -> None:
 
 
 def require_user(request: Request) -> str:
-    user = verify_token(request.cookies.get(COOKIE))
+    user = verify_token(session_token(request.cookies))
     if not user:
         raise HTTPException(401, "Wymagane logowanie")
     return user
@@ -221,4 +228,4 @@ def ws_user(ws: WebSocket) -> str | None:
     host = ws.headers.get("host")
     if origin and host and origin.split("://", 1)[-1] != host:
         return None
-    return verify_token(ws.cookies.get(COOKIE))
+    return verify_token(session_token(ws.cookies))

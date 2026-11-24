@@ -314,22 +314,22 @@ class FileHelpersTests(unittest.TestCase):
 
 class ExtensionArtifactTests(unittest.TestCase):
     ROOT = Path(__file__).resolve().parents[1]
-    JAR = ROOT / "bedrock_ext" / "MineNodeRouter.jar"
+    JAR = ROOT / "bedrock_ext" / "VardenRouter.jar"
 
     def test_jar_contains_extension_metadata_and_classes(self):
-        self.assertTrue(self.JAR.is_file(), "MineNodeRouter.jar must be committed")
+        self.assertTrue(self.JAR.is_file(), "VardenRouter.jar must be committed")
         with zipfile.ZipFile(self.JAR) as zf:
             names = set(zf.namelist())
             self.assertIn("extension.yml", names)
-            self.assertIn("pl/minenode/router/MineNodeRouter.class", names)
-            self.assertIn("pl/minenode/router/RouteTable.class", names)
-            self.assertIn("pl/minenode/router/RouteRemoteServer.class", names)
+            self.assertIn("pl/varden/router/VardenRouter.class", names)
+            self.assertIn("pl/varden/router/RouteTable.class", names)
+            self.assertIn("pl/varden/router/RouteRemoteServer.class", names)
             metadata = zf.read("extension.yml").decode()
-            self.assertIn("id: minenode-router", metadata)
-            self.assertIn("main: pl.minenode.router.MineNodeRouter", metadata)
+            self.assertIn("id: varden-router", metadata)
+            self.assertIn("main: pl.varden.router.VardenRouter", metadata)
             self.assertIn("api: 2.9.2", metadata)
 
-            class_bytes = zf.read("pl/minenode/router/MineNodeRouter.class")
+            class_bytes = zf.read("pl/varden/router/VardenRouter.class")
             # Java class file: CAFEBABE, minor, major (65 = Java 21).
             self.assertEqual(class_bytes[:4], b"\xca\xfe\xba\xbe")
             self.assertEqual(int.from_bytes(class_bytes[6:8], "big"), 65)
@@ -386,10 +386,10 @@ class LifecycleTests(unittest.IsolatedAsyncioTestCase):
         bedrock.GEYSER_JAR = bedrock.BEDROCK_DIR / "geyser-standalone.jar"
         bedrock.CONFIG = bedrock.BEDROCK_DIR / "config.yml"
         bedrock.EXTENSIONS_DIR = bedrock.BEDROCK_DIR / "extensions"
-        bedrock.ROUTER_JAR = bedrock.EXTENSIONS_DIR / "MineNodeRouter.jar"
-        bedrock.ROUTER_DIR = bedrock.EXTENSIONS_DIR / "minenode-router"
+        bedrock.ROUTER_JAR = bedrock.EXTENSIONS_DIR / "VardenRouter.jar"
+        bedrock.ROUTER_DIR = bedrock.EXTENSIONS_DIR / "varden-router"
         bedrock.ROUTES = bedrock.ROUTER_DIR / "routes.properties"
-        bedrock.BUNDLED_ROUTER_JAR = self.tmp / "bundle" / "MineNodeRouter.jar"
+        bedrock.BUNDLED_ROUTER_JAR = self.tmp / "bundle" / "VardenRouter.jar"
         bedrock.BUNDLED_ROUTER_JAR.parent.mkdir(parents=True)
         bedrock.BUNDLED_ROUTER_JAR.write_bytes(b"fake-jar")
         bedrock.GEYSER_JAR.parent.mkdir(parents=True)
@@ -634,4 +634,4 @@ class IntegratedPackTests(unittest.TestCase):
         self.assertNotIn("enable-integrated-pack", proxy._config_text("online"))  # Geyser default: on
         proxy.m.settings.bedrock_integrated_pack = False
         text = proxy._config_text("online")
-        self.assertIn("gameplay:\n  server-name: 'MineNode'\n  enable-integrated-pack: false\nadvanced:\n", text)
+        self.assertIn("gameplay:\n  server-name: 'Varden'\n  enable-integrated-pack: false\nadvanced:\n", text)

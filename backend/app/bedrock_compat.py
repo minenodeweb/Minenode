@@ -20,7 +20,7 @@ from .content import load_meta, save_meta
 if TYPE_CHECKING:
     from .manager import ServerInstance
 
-log = logging.getLogger("minenode.bedrock.compat")
+log = logging.getLogger("varden.bedrock.compat")
 
 GEYSER_JAVA_FALLBACK = "26.3"
 GEYSER_PROTOCOL_FALLBACK = 777
@@ -85,7 +85,7 @@ def _find(inst: "ServerInstance", kind: str) -> Path | None:
 def _base(inst: "ServerInstance", geyser_java: str | None = None) -> dict:
     geyser_java = geyser_java or GEYSER_JAVA_FALLBACK
     mc = getattr(inst.cfg, "mc_version", GEYSER_JAVA_FALLBACK)
-    # MineNode's shared Geyser gateway must use offline authentication.  This
+    # Varden's shared Geyser gateway must use offline authentication.  This
     # avoids mixing the Java server's online-mode session verification with
     # Bedrock/Xbox authentication and makes the requirement explicit instead
     # of silently changing server.properties behind the user's back.

@@ -40,7 +40,7 @@
             <a v-if="c.url" :href="c.url" target="_blank" rel="noopener" class="btn sm ghost icon" :title="$t('Strona projektu')"><ExternalLink /></a>
             <button v-if="c.action === 'update'" class="btn sm" :class="{ primary: c.update_available }" :disabled="busy[c.id]" @click="updateComponent(c)">
               <Loader2 v-if="busy[c.id]" class="spin" /><Download v-else /> {{ $t(c.update_available ? 'Aktualizuj' : 'Sprawdź i pobierz') }}</button>
-            <span v-else class="badge" :title="$t(c.note || '')">{{ $t(c.action === 'local' ? 'lokalny plik' : 'w obrazie MineNode') }}</span>
+            <span v-else class="badge" :title="$t(c.note || '')">{{ $t(c.action === 'local' ? 'lokalny plik' : 'w obrazie Varden') }}</span>
           </div>
         </div>
       </section>

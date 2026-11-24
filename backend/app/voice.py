@@ -1,4 +1,4 @@
-"""Simple Voice Chat control plane (datagram forwarding runs in minenode-proxy).
+"""Simple Voice Chat control plane (datagram forwarding runs in varden-proxy).
 
 Every SVC packet a client sends starts with a magic byte (0xFF) followed by the player's UUID in
 plain text. Python synchronizes the active ``server_id -> voice_port`` and ``player_uuid ->
@@ -18,7 +18,7 @@ from .properties import read_properties, write_properties
 if TYPE_CHECKING:
     from .manager import Manager, ServerInstance
 
-log = logging.getLogger("minenode.voice")
+log = logging.getLogger("varden.voice")
 
 SVC_PROJECT_ID = "9eGKb6K1"  # Simple Voice Chat on Modrinth
 

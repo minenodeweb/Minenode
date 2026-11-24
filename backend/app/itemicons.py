@@ -180,7 +180,7 @@ def _mod_jars(inst: "ServerInstance") -> list[Path]:
 
 def _resource_packs(inst: "ServerInstance") -> list[Path]:
     """Locally installed resource-pack ZIPs (their textures override vanilla/mod icons)."""
-    folder = Path(inst.dir) / ".minenode" / "resourcepacks"
+    folder = Path(inst.dir) / ".varden" / "resourcepacks"
     try:
         return sorted(p for p in folder.glob("*.zip") if p.is_file())
     except OSError:
@@ -190,7 +190,7 @@ def _resource_packs(inst: "ServerInstance") -> list[Path]:
 def signature(inst: "ServerInstance") -> list[Any]:
     version = str(getattr(inst.cfg, "mc_version", "") or "")
     mods = _scan_files(content_dir(inst), ".jar")
-    packs = _scan_files(Path(inst.dir) / ".minenode" / "resourcepacks", ".zip")
+    packs = _scan_files(Path(inst.dir) / ".varden" / "resourcepacks", ".zip")
     return [version, mods, packs]
 
 

@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="docs/logo/minenode-logo-2048.png" width="128" alt="MineNode logo">
+  <img src="docs/logo/varden-logo-2048.png" width="128" alt="Varden logo">
 </p>
 
-<h1 align="center">MineNode</h1>
+<h1 align="center">Varden</h1>
 
 <p align="center">
   <b>A modern, self-hosted panel for Minecraft servers – in a single Docker container.</b><br>
@@ -11,8 +11,8 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License: Apache 2.0"></a>
-  <a href="https://hub.docker.com/r/zzabek/minenode"><img src="https://img.shields.io/docker/pulls/zzabek/minenode?logo=docker&logoColor=white" alt="Docker pulls"></a>
-  <a href="https://hub.docker.com/r/zzabek/minenode"><img src="https://img.shields.io/docker/image-size/zzabek/minenode/latest?logo=docker&logoColor=white&label=image" alt="Docker image size"></a>
+  <a href="https://hub.docker.com/r/zzabek/varden"><img src="https://img.shields.io/docker/pulls/zzabek/varden?logo=docker&logoColor=white" alt="Docker pulls"></a>
+  <a href="https://hub.docker.com/r/zzabek/varden"><img src="https://img.shields.io/docker/image-size/zzabek/varden/latest?logo=docker&logoColor=white&label=image" alt="Docker image size"></a>
   <img src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white" alt="Python 3.12">
   <img src="https://img.shields.io/badge/Vue-3-4FC08D?logo=vuedotjs&logoColor=white" alt="Vue 3">
   <img src="https://img.shields.io/badge/Rust-proxy-000000?logo=rust&logoColor=white" alt="Rust proxy">
@@ -28,13 +28,15 @@
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/dashboard.webp" alt="MineNode dashboard – servers, host resources and proxy">
+  <img src="docs/screenshots/dashboard.webp" alt="Varden dashboard – servers, host resources and proxy">
 </p>
 
 > [!NOTE]
-> MineNode is under active development. Back up your worlds (the panel can do it for you) before big updates.
+> Varden is under active development. Back up your worlds (the panel can do it for you) before big updates.
+>
+> **Varden was previously called MineNode.** Existing installations keep working – see [Upgrading from MineNode](docs/installation.md#upgrading-from-minenode).
 
-## Why MineNode?
+## Why Varden?
 
 - **One container, one port.** Every server runs behind a single Minecraft port and gets its own address, e.g. `survival.mc.example.com`. Bedrock and voice chat also share one port each.
 - **No manual downloads.** Engines, Java, mods, plugins, maps and their updates come from official sources – mostly [Modrinth](https://modrinth.com).
@@ -75,7 +77,7 @@
 
 **Backups and administration**
 - Advanced backup system: scheduled, consistent backups to the panel disk, a NAS folder, S3-compatible storage or WebDAV – several at once, each with its own retention
-- Portable `.minenodepack` export / import of whole servers
+- Portable `.vardenpack` export / import of whole servers
 - Setup wizard on first start, multiple panel users, password reset from the terminal
 - English and Polish interface, light and dark theme
 
@@ -83,21 +85,27 @@ Every feature is described in detail in **[docs/features.md](docs/features.md)**
 
 ## Screenshots
 
-| Dashboard | New server | Sign-in |
+| Server overview | Live console | Plugins & mods |
 | :---: | :---: | :---: |
-| <img src="docs/screenshots/dashboard.webp" alt="Dashboard" width="300"> | <img src="docs/screenshots/new-server.webp" alt="Creating a server" width="300"> | <img src="docs/screenshots/login.webp" alt="Sign-in screen" width="300"> |
+| <a href="docs/screenshots/server-overview.webp"><img src="docs/screenshots/server-overview.webp" alt="Server overview with CPU and memory charts" width="300"></a> | <a href="docs/screenshots/console.webp"><img src="docs/screenshots/console.webp" alt="Live console" width="300"></a> | <a href="docs/screenshots/plugins.webp"><img src="docs/screenshots/plugins.webp" alt="Plugins from Modrinth with compatibility checks" width="300"></a> |
+| **Updates** | **Backups** | **Datapacks** |
+| <a href="docs/screenshots/updates.webp"><img src="docs/screenshots/updates.webp" alt="Updates tab" width="300"></a> | <a href="docs/screenshots/backups.webp"><img src="docs/screenshots/backups.webp" alt="Backups to several destinations" width="300"></a> | <a href="docs/screenshots/datapacks.webp"><img src="docs/screenshots/datapacks.webp" alt="Datapacks from Modrinth" width="300"></a> |
+| **Public server page** | **Player statistics** | **New server** |
+| <a href="docs/screenshots/public-page-full.webp"><img src="docs/screenshots/public-page.webp" alt="Public server page" width="300"></a> | <a href="docs/screenshots/player-stats.webp"><img src="docs/screenshots/player-stats.webp" alt="Player statistics with 3D block icons" width="300"></a> | <a href="docs/screenshots/new-server.webp"><img src="docs/screenshots/new-server.webp" alt="Creating a server" width="300"></a> |
+
+<sub>Screenshots show a demo with fictional servers and players.</sub>
 
 ## Quick start
 
-You need a machine with **Docker** and **Docker Compose**. Java is not needed – MineNode downloads it by itself.
+You need a machine with **Docker** and **Docker Compose**. Java is not needed – Varden downloads it by itself.
 
 **1. Create `docker-compose.yml`:**
 
 ```yaml
 services:
-  minenode:
-    image: zzabek/minenode:latest
-    container_name: minenode
+  varden:
+    image: zzabek/varden:latest
+    container_name: varden
     restart: unless-stopped
     ports:
       - "8080:8080"           # web panel
@@ -106,13 +114,13 @@ services:
       - "19132:19132/tcp"     # Bedrock Edition (Geyser)
       - "19132:19132/udp"     # Bedrock Edition (Geyser)
     volumes:
-      - minenode-data:/data
+      - varden-data:/data
     environment:
       TZ: Europe/Warsaw
     stop_grace_period: 2m     # lets servers save their worlds on stop
 
 volumes:
-  minenode-data:
+  varden-data:
 ```
 
 **2. Start it:**
@@ -128,10 +136,10 @@ docker compose up -d
 Prefer a single command?
 
 ```bash
-docker run -d --name minenode --restart unless-stopped \
+docker run -d --name varden --restart unless-stopped \
   -p 8080:8080 -p 25565:25565 -p 24454:24454/udp -p 19132:19132/tcp -p 19132:19132/udp \
-  -v minenode-data:/data --stop-timeout 120 \
-  zzabek/minenode:latest
+  -v varden-data:/data --stop-timeout 120 \
+  zzabek/varden:latest
 ```
 
 **Updating:**
@@ -157,7 +165,7 @@ docker compose pull && docker compose up -d
 
 ## Open source projects used
 
-MineNode stands on the shoulders of these projects – thank you to all their authors.
+Varden stands on the shoulders of these projects – thank you to all their authors.
 
 **Minecraft software and services**
 
@@ -185,20 +193,20 @@ MineNode stands on the shoulders of these projects – thank you to all their au
 
 [FastAPI](https://fastapi.tiangolo.com), [Uvicorn](https://www.uvicorn.org), [Pydantic](https://docs.pydantic.dev), [HTTPX](https://www.python-httpx.org), [psutil](https://github.com/giampaolo/psutil), [boto3](https://github.com/boto/boto3), [Pillow](https://python-pillow.org), [Vue](https://vuejs.org), [Vue Router](https://router.vuejs.org), [Vite](https://vite.dev), [Lucide](https://lucide.dev), [Tokio](https://tokio.rs), and the fonts Inter, JetBrains Mono and Pixelify Sans.
 
-None of the game servers, plugins or mods are stored in this repository: MineNode downloads them from their official sources on your machine, and each keeps its own license.
+None of the game servers, plugins or mods are stored in this repository: Varden downloads them from their official sources on your machine, and each keeps its own license.
 
 ## Authors
 
-MineNode is made by **Bernard Wieczorek** and **Piotr Janaszak**.
+Varden is made by **Bernard Wieczorek** and **Piotr Janaszak**.
 
-Found a bug or have an idea? [Open an issue](https://github.com/minenodeweb/Minenode/issues).
+Found a bug or have an idea? [Open an issue](https://github.com/Varden-app/Varden/issues).
 
 ## License
 
-MineNode is open source under the **[Apache License 2.0](LICENSE)**.
+Varden is open source under the **[Apache License 2.0](LICENSE)**.
 
 In short: you may use it, modify it, build on it and share it – also commercially – **as long as you credit the authors**. Keep the [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE) files (or show their contents in your documentation or about page), link back to this repository and mark the files you changed. The software comes without any warranty.
 
 ---
 
-<sub>MineNode is not an official Minecraft product. It is not approved by or associated with Mojang or Microsoft.</sub>
+<sub>Varden is not an official Minecraft product. It is not approved by or associated with Mojang or Microsoft.</sub>

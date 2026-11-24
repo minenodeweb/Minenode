@@ -185,7 +185,7 @@ pub async fn run_udp_server(
             res = public_sock.recv_from(&mut buf) => match res {
                 Ok(pair) => pair,
                 Err(e) => {
-                    eprintln!("[minenode-proxy] UDP recv error: {e}");
+                    eprintln!("[varden-proxy] UDP recv error: {e}");
                     tokio::time::sleep(Duration::from_millis(10)).await;
                     continue;
                 }

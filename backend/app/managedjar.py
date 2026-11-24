@@ -35,7 +35,7 @@ def mc_tuple(v: str) -> tuple[int, ...]:
 class ManagedJar:
     """One managed project.
 
-    ``loaders`` maps a MineNode engine to the Modrinth loaders whose builds run on it. ``fallback``
+    ``loaders`` maps a Varden engine to the Modrinth loaders whose builds run on it. ``fallback``
     decides whether a build tagged only for another patch release of the same minor line may be used:
     ``"never"`` (mods tied to an exact version), ``"plugin"`` (plugins only) or ``"26"`` (only on the
     26.x line, whose builds run on every patch release of their minor version). ``extra`` can supply a

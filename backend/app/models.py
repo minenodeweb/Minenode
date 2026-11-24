@@ -87,7 +87,7 @@ class BackupDestination(BaseModel):
     endpoint: str = ""      # s3: empty = AWS, otherwise e.g. https://s3.eu-central-003.backblazeb2.com
     region: str = ""
     bucket: str = ""
-    prefix: str = "minenode"
+    prefix: str = "varden"
     access_key: str = ""
     secret_key: str = ""
     path_style: bool = False  # s3: needed by MinIO and many self-hosted servers

@@ -1,8 +1,8 @@
 """Datapacks of the server's main world (``<level-name>/datapacks/``).
 
 Minecraft loads every ``.zip`` and folder it finds there on start. A disabled pack is moved out of the world
-to ``.minenode/datapacks-disabled/`` – that works the same for zips and folders and survives world resets.
-Panel metadata (source, version, icon) lives in ``.minenode/datapacks.json`` keyed by file name.
+to ``.varden/datapacks-disabled/`` – that works the same for zips and folders and survives world resets.
+Panel metadata (source, version, icon) lives in ``.varden/datapacks.json`` keyed by file name.
 """
 from __future__ import annotations
 
@@ -42,11 +42,11 @@ def active_dir(inst: "ServerInstance") -> Path:
 
 
 def disabled_dir(inst: "ServerInstance") -> Path:
-    return inst.dir / ".minenode" / "datapacks-disabled"
+    return inst.dir / ".varden" / "datapacks-disabled"
 
 
 def _meta_path(inst: "ServerInstance") -> Path:
-    return inst.dir / ".minenode" / "datapacks.json"
+    return inst.dir / ".varden" / "datapacks.json"
 
 
 def _load_meta(inst: "ServerInstance") -> dict:

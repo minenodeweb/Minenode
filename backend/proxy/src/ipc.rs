@@ -385,7 +385,7 @@ impl IpcClient {
                         continue;
                     }
                     let Ok(val) = serde_json::from_str::<Value>(&line) else {
-                        eprintln!("[minenode-proxy] ignoring malformed IPC JSON");
+                        eprintln!("[varden-proxy] ignoring malformed IPC JSON");
                         continue;
                     };
                     if val.get("t").and_then(Value::as_str) == Some("resp") {
@@ -415,7 +415,7 @@ impl IpcClient {
                             break;
                         }
                         Err(e) => {
-                            eprintln!("[minenode-proxy] unknown IPC command: {e}");
+                            eprintln!("[varden-proxy] unknown IPC command: {e}");
                         }
                     }
                 }

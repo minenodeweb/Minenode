@@ -29,7 +29,7 @@ COPY backend/proxy/src ./src
 RUN cargo build --release
 
 # ---------------------------------------------------------------- PicoLimbo auth lobby (Rust)
-# Compiled at image build time from the author's latest stable release + MineNode's login patch;
+# Compiled at image build time from the author's latest stable release + Varden's login patch;
 # no PicoLimbo source files are stored in this repository.
 # Pass --build-arg PICOLIMBO_TAG=<tag> (done automatically by deploy.cmd) or --no-cache-filter picolimbo
 # to pick up a newly published upstream release when rebuilding.
@@ -39,7 +39,7 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates patch binutils \
  && rm -rf /var/lib/apt/lists/* \
  && rustup set profile minimal
-COPY backend/app/assets/picolimbo/minenode-auth.patch /picolimbo/minenode-auth.patch
+COPY backend/app/assets/picolimbo/varden-auth.patch /picolimbo/varden-auth.patch
 ARG PICOLIMBO_REPO=Quozul/PicoLimbo
 ARG PICOLIMBO_TAG=latest
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
@@ -47,7 +47,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/picolimbo/target \
     set -eu; \
     unset RUSTUP_TOOLCHAIN; \
-    sed -i 's/\r$//' /picolimbo/minenode-auth.patch; \
+    sed -i 's/\r$//' /picolimbo/varden-auth.patch; \
     if ! printf '%s' "$PICOLIMBO_REPO" | grep -Eq '^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$'; then \
       echo "Invalid PICOLIMBO_REPO: $PICOLIMBO_REPO" >&2; exit 1; \
     fi; \
@@ -74,7 +74,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     rm -f /tmp/picolimbo.tar.gz; \
     test -f /picolimbo/src/Cargo.toml && test -d /picolimbo/src/pico_limbo; \
     cd /picolimbo/src; \
-    patch -p1 --forward --batch -i /picolimbo/minenode-auth.patch; \
+    patch -p1 --forward --batch -i /picolimbo/varden-auth.patch; \
     cargo add --quiet --package pico_limbo hex@0.4 getrandom@0.3; \
     rm -f /picolimbo/target/release/pico_limbo; \
     CARGO_TARGET_DIR=/picolimbo/target cargo build --release --bin pico_limbo; \
@@ -84,7 +84,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     for lic in LICENSE LICENSE.md LICENSE.txt LICENSE-MIT; do \
       if [ -f "$lic" ]; then cp "$lic" /out/licenses/PICOLIMBO-LICENSE; break; fi; \
     done; \
-    PATCH_ID=$(sha256sum /picolimbo/minenode-auth.patch | cut -c1-8); \
+    PATCH_ID=$(sha256sum /picolimbo/varden-auth.patch | cut -c1-8); \
     BIN_SHA=$(sha256sum /out/pico_limbo | awk '{print $1}'); \
     VERSION="${TAG#v}"; \
     BUILT_AT=$(date +%s); \
@@ -93,49 +93,49 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 
 # ---------------------------------------------------------------- runtime
 FROM python:3.12-slim-bookworm
-LABEL org.opencontainers.image.title="MineNode" \
+LABEL org.opencontainers.image.title="Varden" \
       org.opencontainers.image.description="Minecraft server management panel with built-in reverse proxy"
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    MINENODE_DATA=/data \
-    MINENODE_STATIC=/app/static \
-    MINENODE_PORT=8080 \
-    MINENODE_PROXY_PORT=25565 \
-    MINENODE_VOICE_PORT=24454 \
-    MINENODE_BEDROCK_PORT=19132 \
+    VARDEN_DATA=/data \
+    VARDEN_STATIC=/app/static \
+    VARDEN_PORT=8080 \
+    VARDEN_PROXY_PORT=25565 \
+    VARDEN_VOICE_PORT=24454 \
+    VARDEN_BEDROCK_PORT=19132 \
     TZ=Europe/Warsaw
 
 # tini: proper PID 1 / signal forwarding; fontconfig+freetype: needed by some mods (maps, image rendering)
 RUN apt-get update \
  && apt-get install -y --no-install-recommends tini ca-certificates tzdata fontconfig libfreetype6 procps \
  && rm -rf /var/lib/apt/lists/* \
- && groupadd -g 1000 minenode && useradd -u 1000 -g 1000 -m -d /home/minenode minenode
+ && groupadd -g 1000 varden && useradd -u 1000 -g 1000 -m -d /home/varden varden
 
 WORKDIR /app
 COPY backend/requirements.txt ./
 RUN pip install -r requirements.txt
 COPY backend/app ./app
-COPY --from=rust_proxy /proxy/target/release/minenode-proxy ./bin/minenode-proxy
+COPY --from=rust_proxy /proxy/target/release/varden-proxy ./bin/varden-proxy
 COPY --from=picolimbo /out/pico_limbo ./bin/pico_limbo
 COPY --from=picolimbo /out/picolimbo-version.json ./bin/picolimbo-version.json
 COPY --from=picolimbo /out/licenses ./licenses
-COPY --from=bedrock_ext /ext/MineNodeRouter.jar ./bedrock_ext/MineNodeRouter.jar
+COPY --from=bedrock_ext /ext/VardenRouter.jar ./bedrock_ext/VardenRouter.jar
 COPY --from=web /web/dist ./static
 COPY docker/entrypoint.sh /entrypoint.sh
 COPY reset_password.sh /usr/local/bin/reset_password.sh
 # strip Windows line endings (a CRLF checkout breaks the shebang: "exec /entrypoint.sh failed")
 RUN sed -i 's/\r$//' /entrypoint.sh /usr/local/bin/reset_password.sh && chmod +x /entrypoint.sh /usr/local/bin/reset_password.sh \
- && mkdir -p /data && chown minenode:minenode /data
+ && mkdir -p /data && chown varden:varden /data
 
 VOLUME ["/data"]
 EXPOSE 8080 25565 24454/udp 19132/tcp 19132/udp
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD python -c "import urllib.request,os;urllib.request.urlopen(f'http://127.0.0.1:{os.environ.get(\"MINENODE_PORT\",\"8080\")}/api/health',timeout=4)" || exit 1
+  CMD python -c "import urllib.request,os;urllib.request.urlopen(f'http://127.0.0.1:{((os.environ.get(\"VARDEN_PORT\") if os.environ.get(\"VARDEN_PORT\",\"8080\")!=\"8080\" else None) or os.environ.get(\"MINENODE_PORT\") or \"8080\")}/api/health',timeout=4)" || exit 1
 
 ENTRYPOINT ["/usr/bin/tini", "--", "/entrypoint.sh"]
-# X-Forwarded-For is only trusted from MINENODE_TRUSTED_PROXIES (your reverse proxy). Trusting it from
+# X-Forwarded-For is only trusted from VARDEN_TRUSTED_PROXIES (your reverse proxy). Trusting it from
 # anyone would let clients pick their own IP and bypass the login attempt limit.
-CMD ["sh", "-c", "exec python -m uvicorn app.main:app --host 0.0.0.0 --port ${MINENODE_PORT} --proxy-headers --forwarded-allow-ips=\"${MINENODE_TRUSTED_PROXIES:-127.0.0.1}\" --no-server-header"]
+CMD ["sh", "-c", "exec python -m uvicorn app.main:app --host 0.0.0.0 --port ${VARDEN_PORT} --proxy-headers --forwarded-allow-ips=\"${VARDEN_TRUSTED_PROXIES:-127.0.0.1}\" --no-server-header"]

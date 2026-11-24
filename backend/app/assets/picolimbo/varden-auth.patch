@@ -36,7 +36,7 @@ index 0000000..af60944
 --- /dev/null
 +++ b/pico_limbo/src/auth.rs
 @@ -0,0 +1,130 @@
-+//! MineNode's deliberately small, file-compatible lobby authentication.
++//! Varden's deliberately small, file-compatible lobby authentication.
 +//! Registration is create-only; existing password material is never changed
 +//! by PicoLimbo. Password changes remain a panel-only operation.
 +use hmac::{Hmac, KeyInit, Mac};
@@ -53,7 +53,7 @@ index 0000000..af60944
 +const PENDING_TTL: i64 = 30 * 60;
 +
 +fn root() -> PathBuf {
-+    std::env::var_os("MINENODE_DATA").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("/data"))
++    std::env::var_os("VARDEN_DATA").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("/data"))
 +}
 +fn file() -> PathBuf { root().join("auth/sessions.db") }
 +fn pending_file() -> PathBuf { root().join("auth/pending.db") }
@@ -120,17 +120,17 @@ index 0000000..af60944
 +        if args.len() != 2 || args[0] != args[1] || args[0].len() < 6 { return Some(ResultKind::Message("Użycie: /register <hasło min. 6 znaków> <powtórz hasło>".into())); }
 +        if index.is_some() { return Some(ResultKind::Message("Ten nick jest już zarejestrowany. Użyj /login.".into())); }
 +        let Some(ip) = ip else {
-+            warn!("MineNodeAuth: refusing /register for {} without a pending client IP", name);
++            warn!("VardenAuth: refusing /register for {} without a pending client IP", name);
 +            return Some(ResultKind::Message("Nie można ustalić adresu IP. Połącz się ponownie.".into()));
 +        };
 +        let salt = random_salt();
 +        let hash = pbkdf2(args[0], &salt).unwrap();
 +        data.push(vec![key, salt, hash, ip.clone(), (now() + SESSION_TTL).to_string()]);
 +        if let Err(err) = write(&data) {
-+            warn!("MineNodeAuth: could not save account {}: {}", name, err);
++            warn!("VardenAuth: could not save account {}: {}", name, err);
 +            return Some(ResultKind::Message("Nie udało się zapisać konta. Spróbuj ponownie.".into()));
 +        }
-+        info!("MineNodeAuth: registered {} with IP {}", name, ip);
++        info!("VardenAuth: registered {} with IP {}", name, ip);
 +        return Some(ResultKind::Success("Zarejestrowano i zalogowano. Połącz się ponownie.".into()));
 +    }
 +    if args.len() != 1 { return Some(ResultKind::Message("Użycie: /login <hasło>".into())); }
@@ -140,10 +140,10 @@ index 0000000..af60944
 +    match ip {
 +        Some(ip) => data[i][3] = ip,
 +        None if data[i][3].is_empty() || data[i][3] == "unknown" => {
-+            warn!("MineNodeAuth: refusing /login for {} without a pending client IP", name);
++            warn!("VardenAuth: refusing /login for {} without a pending client IP", name);
 +            return Some(ResultKind::Message("Nie można ustalić adresu IP. Połącz się ponownie.".into()));
 +        }
-+        None => warn!("MineNodeAuth: no pending IP for {}; keeping stored session IP", name),
++        None => warn!("VardenAuth: no pending IP for {}; keeping stored session IP", name),
 +    }
 +    data[i][4] = (now() + SESSION_TTL).to_string();
 +    // A successful reauthentication starts a new client-fingerprint binding.
@@ -151,10 +151,10 @@ index 0000000..af60944
 +    // session when the proxy captures the client again.
 +    if data[i].len() > 5 { data[i][5].clear(); }
 +    if let Err(err) = write(&data) {
-+        warn!("MineNodeAuth: could not save session for {}: {}", name, err);
++        warn!("VardenAuth: could not save session for {}: {}", name, err);
 +        return Some(ResultKind::Message("Nie udało się zapisać sesji. Spróbuj ponownie.".into()));
 +    }
-+    info!("MineNodeAuth: logged in {} from IP {}", name, data[i][3]);
++    info!("VardenAuth: logged in {} from IP {}", name, data[i][3]);
 +    Some(ResultKind::Success("Zalogowano. Połącz się ponownie.".into()))
 +}
 +
@@ -176,7 +176,7 @@ index 69b4993..b977605 100644
  ) {
 -    let mut commands = vec![];
 +    let mut commands = vec![
-+        // MineNodeAuth commands are part of the lobby protocol, not optional
++        // VardenAuth commands are part of the lobby protocol, not optional
 +        // PicoLimbo server commands. Advertising them is required for Java
 +        // Brigadier clients and Bedrock clients translated by Geyser.
 +        Command::with_required_arguments(

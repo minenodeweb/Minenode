@@ -26,13 +26,13 @@ export function confirmDialog({ title, message = '', confirmText = 'Potwierdź',
 }
 
 // ---------------------------------------------------------------- theme
-const saved = (() => { try { return localStorage.getItem('minenode-theme') } catch { return null } })()
+const saved = (() => { try { return (localStorage.getItem('varden-theme') ?? localStorage.getItem('minenode-theme')) } catch { return null } })()
 export const ui = reactive({ theme: saved || 'dark', sidebarOpen: false })
 export function applyTheme() {
   document.documentElement.dataset.theme = ui.theme
 }
 export function toggleTheme() {
   ui.theme = ui.theme === 'dark' ? 'light' : 'dark'
-  try { localStorage.setItem('minenode-theme', ui.theme) } catch {}
+  try { localStorage.setItem('varden-theme', ui.theme) } catch {}
   applyTheme()
 }

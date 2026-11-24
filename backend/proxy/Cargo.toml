@@ -1,5 +1,5 @@
 [package]
-name = "minenode-proxy"
+name = "varden-proxy"
 version = "1.0.0"
 edition = "2021"
 

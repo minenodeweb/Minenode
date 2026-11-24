@@ -51,7 +51,7 @@ def content_dir(inst: "ServerInstance") -> Path:
 
 
 def _meta_path(inst: "ServerInstance") -> Path:
-    return inst.dir / ".minenode" / "content.json"
+    return inst.dir / ".varden" / "content.json"
 
 
 def load_meta(inst: "ServerInstance") -> dict:

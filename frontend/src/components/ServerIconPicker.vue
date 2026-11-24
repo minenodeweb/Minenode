@@ -7,7 +7,7 @@
     <div class="grow" style="min-width: 0">
       <div class="row wrap" style="gap: 6px">
         <button type="button" class="btn sm" :disabled="busy" @click="input?.click()"><Upload /> {{ $t('Wgraj ikonę') }}</button>
-        <button type="button" class="btn sm ghost" :disabled="busy" @click="run(() => api.post(`/servers/${serverId}/icon/default`), 'Przywrócono ikonę MineNode')"><RotateCcw /> {{ $t('Ikona MineNode') }}</button>
+        <button type="button" class="btn sm ghost" :disabled="busy" @click="run(() => api.post(`/servers/${serverId}/icon/default`), 'Przywrócono ikonę Varden')"><RotateCcw /> {{ $t('Ikona Varden') }}</button>
         <button v-if="hasIcon" type="button" class="btn sm ghost danger" :disabled="busy" @click="run(() => api.del(`/servers/${serverId}/icon`), 'Usunięto ikonę')"><Trash2 /> {{ $t('Usuń') }}</button>
       </div>
       <div class="hint">{{ $t('PNG, JPG, WebP lub GIF – panel przytnie obraz do kwadratu 64×64 px.') }}</div>

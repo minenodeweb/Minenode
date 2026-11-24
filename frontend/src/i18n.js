@@ -4,7 +4,7 @@ import { reactive } from 'vue'
 import en from './locales/en'
 
 const LOCALES = ['pl', 'en']
-const stored = (() => { try { return localStorage.getItem('minenode-lang') } catch { return null } })()
+const stored = (() => { try { return (localStorage.getItem('varden-lang') ?? localStorage.getItem('minenode-lang')) } catch { return null } })()
 
 // English until the panel says otherwise: the first-run wizard starts in English and its language
 // choice becomes the default for browsers that never picked a language themselves.
@@ -47,7 +47,7 @@ export function setLocale(l) {
   if (!LOCALES.includes(l)) return
   i18n.locale = l
   document.documentElement.lang = l
-  try { localStorage.setItem('minenode-lang', l) } catch {}
+  try { localStorage.setItem('varden-lang', l) } catch {}
 }
 
 export const dateLocale = () => (i18n.locale === 'en' ? 'en-GB' : 'pl-PL')

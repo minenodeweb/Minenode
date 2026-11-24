@@ -82,7 +82,7 @@ router.beforeEach(async (to) => {
   if (to.name === 'login' && auth.user) return { name: 'dashboard' }
 })
 
-window.addEventListener('minenode:unauthorized', () => {
+window.addEventListener('varden:unauthorized', () => {
   const current = router.currentRoute.value
   if (current.name !== 'login' && !current.meta.public) router.push({ name: 'login' })
 })

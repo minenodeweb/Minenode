@@ -103,7 +103,7 @@ def test_stage_validate_and_apply(tmp_path):
     staged = [worldgen.stage(datapack(tmp_path), "Better Terrain v2.zip"),
               worldgen.stage(plugin(tmp_path), "Terra-6.jar")]
     assert staged[0]["filename"] == "Better_Terrain_v2.zip"
-    spec = {"level_type": "large_biomes", "seed": "minenode", "generator": "Terra:OVERWORLD",
+    spec = {"level_type": "large_biomes", "seed": "varden", "generator": "Terra:OVERWORLD",
             "files": [s["token"] for s in staged]}
     files = worldgen.validate(spec, "paper", "1.21.1")
 
@@ -118,7 +118,7 @@ def test_stage_validate_and_apply(tmp_path):
     assert (server / "plugins" / "Terra-6.jar").is_file()
     assert "generator: Terra:OVERWORLD" in (server / "bukkit.yml").read_text()
     props = read_properties(server / "server.properties")
-    assert props["level-type"] == "minecraft:large_biomes" and props["level-seed"] == "minenode"
+    assert props["level-type"] == "minecraft:large_biomes" and props["level-seed"] == "varden"
     assert not list(worldgen.STAGE_DIR.glob("*.json"))  # staged copies are gone
     assert logs
 

@@ -24,7 +24,7 @@ import zipfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
-from . import content, squaremap
+from . import content, legacy, squaremap
 from .managedjar import ManagedJar, github_release_asset, mc_tuple
 from .modpacks import ModpackError
 from .store import atomic_write_text
@@ -32,7 +32,7 @@ from .store import atomic_write_text
 if TYPE_CHECKING:
     from .manager import ServerInstance
 
-log = logging.getLogger("minenode.webmap")
+log = logging.getLogger("varden.webmap")
 
 PROVIDER_IDS = ("squaremap", "dynmap", "bluemap")
 INFO = {
@@ -123,7 +123,7 @@ def _dynmap_templates(three_d: bool) -> str:
                     "        perspective: iso_SE_60_lowres\n        shader: stdtexture\n"
                     f"        lighting: {lighting}\n{bg}        mapzoomin: 2\n")
         return out
-    return ("# Written by MineNode (Add-ons -> Services -> map). Changes here are overwritten.\n"
+    return ("# Written by Varden (Add-ons -> Services -> map). Changes here are overwritten.\n"
             "version: 0.20\ntemplates:\n"
             + env("normal", "surface", "t", "shadows")
             + env("nether", "nether", "nt", "nethershadows", "#300806")
@@ -176,7 +176,8 @@ def dynmap_write_config(inst: "ServerInstance") -> None:
     atomic_write_text(path, text)
     tdir = d / "templates"
     tdir.mkdir(parents=True, exist_ok=True)
-    atomic_write_text(tdir / "custom-minenode.txt", _dynmap_templates(wm.render_3d))
+    atomic_write_text(tdir / "custom-varden.txt", _dynmap_templates(wm.render_3d))
+    (tdir / f"custom-{legacy.OLD}.txt").unlink(missing_ok=True)  # same templates under the pre-rename name
 
 
 # ====================================================================== BlueMap
@@ -186,7 +187,7 @@ BLUEMAP = ManagedJar("bluemap", "BlueMap", BLUEMAP_ID, r"^bluemap-\d[\w.\-]*\.ja
                      {"paper": ["paper"], "purpur": ["paper"], "fabric": ["fabric"], "quilt": ["fabric"],
                       "forge": ["forge"], "neoforge": ["neoforge"]}, fallback="plugin")
 BLUEMAP_WEBROOT = "bluemap/web"
-_BLUEMAP_FORCE_UPDATE_MARKER = ".minenode-force-update"
+_BLUEMAP_FORCE_UPDATE_MARKER = ".varden-force-update"
 
 
 def bluemap_dir(inst: "ServerInstance") -> Path:
@@ -241,7 +242,7 @@ def bluemap_write_config(inst: "ServerInstance", accept: Optional[bool] = None) 
     changed = _edit(d / "core.conf", {
         "accept-download": "true" if accept else "false",
         "render-thread-count": "1",
-    }, header=('# MineNode: accept-download is set by the panel when BlueMap is enabled.\n'
+    }, header=('# Varden: accept-download is set by the panel when BlueMap is enabled.\n'
                'data: "bluemap"\nrender-thread-count: 1\nscan-for-mod-resources: true\nmetrics: false\n'))
     changed |= _edit(d / "webserver.conf", {
         "enabled": "true", "webroot": f'"{BLUEMAP_WEBROOT}"', "ip": '"127.0.0.1"',
@@ -447,14 +448,16 @@ async def disable(inst: "ServerInstance") -> None:
 
 
 def _consume_bluemap_force_update(inst: "ServerInstance") -> bool:
-    marker = bluemap_dir(inst) / _BLUEMAP_FORCE_UPDATE_MARKER
-    if not marker.is_file():
-        return False
-    try:
-        marker.unlink()
-    except OSError:
-        pass
-    return True
+    markers = [bluemap_dir(inst) / name for name in (_BLUEMAP_FORCE_UPDATE_MARKER, f".{legacy.OLD}-force-update")]
+    found = False
+    for marker in markers:
+        if marker.is_file():
+            found = True
+            try:
+                marker.unlink()
+            except OSError:
+                pass
+    return found
 
 
 def _start_bluemap_full_render(inst: "ServerInstance") -> None:

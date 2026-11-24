@@ -24,7 +24,7 @@ from starlette.background import BackgroundTask
 from starlette.websockets import WebSocketDisconnect
 
 from . import storage as storage_mod
-from . import bedrock_compat, datapacks as dpacks, packs, worldgen
+from . import bedrock_compat, datapacks as dpacks, legacy, packs, worldgen
 from . import auth, auth_sessions, content, files, java as javamod, modpacks, players as pl, providers, resourcepacks as rpacks, voice
 from . import chunky, itemicons, lod, playerstats, skins, squaremap, updates, webmap
 from .models import ChunkySettings
@@ -36,7 +36,7 @@ from .properties import MANAGED_KEYS, read_properties, update_properties
 
 router = APIRouter(prefix="/api")
 manager: Manager  # injected by main
-log = logging.getLogger("minenode")
+log = logging.getLogger("varden")
 
 
 def M() -> Manager:
@@ -103,7 +103,7 @@ def _set_cookie(resp: Response, token: str) -> None:
 
 @router.get("/auth/state")
 async def auth_state(request: Request):
-    user = auth.verify_token(request.cookies.get(auth.COOKIE))
+    user = auth.verify_token(auth.session_token(request.cookies))
     m = globals().get("manager")  # injected by main; absent in some tests
     settings = m.settings if m else None
     if auth.setup_required():
@@ -135,8 +135,9 @@ async def auth_login(body: Credentials, request: Request, response: Response):
 
 @router.post("/auth/logout")
 async def auth_logout(request: Request, response: Response):
-    auth.revoke_token(request.cookies.get(auth.COOKIE))
+    auth.revoke_token(auth.session_token(request.cookies))
     response.delete_cookie(auth.COOKIE, path="/")
+    response.delete_cookie(auth.OLD_COOKIE, path="/")
     return {"ok": True}
 
 
@@ -545,7 +546,7 @@ class CreateSettings(BaseModel):
     online_mode: bool = True
     max_players: int = Field(default=20, ge=1, le=1000)
     whitelist: bool = False
-    auth_enabled: bool = True  # MineNodeAuth/PicoLimbo login when online-mode is off
+    auth_enabled: bool = True  # VardenAuth/PicoLimbo login when online-mode is off
     bedrock: bool = False
     gamemode: Literal["survival", "creative", "adventure", "spectator"] = "survival"
     difficulty: Literal["peaceful", "easy", "normal", "hard"] = "easy"
@@ -711,7 +712,7 @@ async def export_server(sid: str, _: str = Depends(auth.require_user)):
         path = await asyncio.to_thread(packs.create, inst)
     except packs.PackError as exc:
         raise HTTPException(400, str(exc)) from exc
-    return FileResponse(path, filename=f"{inst.cfg.subdomain}.minenodepack",
+    return FileResponse(path, filename=f"{inst.cfg.subdomain}.vardenpack",
                         media_type="application/octet-stream",
                         background=BackgroundTask(path.unlink, missing_ok=True))
 
@@ -723,9 +724,9 @@ async def import_server(
     _: str = Depends(auth.require_user),
 ):
     """Import a complete server into a new instance."""
-    filename = Path(file.filename or "server.minenodepack").name
-    if not filename.lower().endswith(".minenodepack"):
-        raise HTTPException(400, "Wybierz plik z rozszerzeniem .minenodepack")
+    filename = Path(file.filename or "server.vardenpack").name
+    if not legacy.is_pack_name(filename):
+        raise HTTPException(400, "Wybierz plik z rozszerzeniem .vardenpack")
     dest = TMP_DIR / f"import-{int(time.time() * 1000)}-{filename}"
     try:
         with open(dest, "wb") as fh:
@@ -1183,7 +1184,7 @@ async def ban(sid: str, body: NameBody, _: str = Depends(auth.require_user)):
         items = pl.read_list(inst.dir / "banned-players.json")
         if not pl.contains(items, prof["name"]):
             items.append({"uuid": prof["uuid"], "name": prof["name"], "created": time.strftime("%Y-%m-%d %H:%M:%S +0000", time.gmtime()),
-                          "source": "MineNode", "expires": "forever", "reason": body.reason or "Banned by an operator."})
+                          "source": "Varden", "expires": "forever", "reason": body.reason or "Banned by an operator."})
             pl.write_list(inst.dir / "banned-players.json", items)
     return {"ok": True}
 
@@ -1302,7 +1303,7 @@ class DestinationBody(BaseModel):
     endpoint: str = ""
     region: str = ""
     bucket: str = ""
-    prefix: str = "minenode"
+    prefix: str = "varden"
     access_key: str = ""
     secret_key: str = ""
     path_style: bool = False
@@ -1587,7 +1588,7 @@ async def server_ws(ws: WebSocket, sid: str):
     if not user or not inst:
         await ws.close(code=4401 if not user else 4404)
         return
-    token = ws.cookies.get(auth.COOKIE)
+    token = auth.session_token(ws.cookies)
 
     def session_ok() -> bool:
         # Logout elsewhere, a password change or a deleted account must end an open console too.
@@ -2163,12 +2164,12 @@ _BLUEMAP_TILE_RE = re.compile(r"^maps/[^/]+/tiles/(\d+)/x-?[\d/]+z-?[\d/]+\.(prb
 _BLUEMAP_BOOST_SCRIPT = """<script>
 (function(){
   try {
-    if (!localStorage.getItem("minenode-bm-hires-v1")) {
+    if (!localStorage.getItem("varden-bm-hires-v1")) {
       var h = Number(JSON.parse(localStorage.getItem("bluemap-hiresViewDistance") || "0"));
       if (!h || h <= 200) localStorage.setItem("bluemap-hiresViewDistance", "500");
       var l = Number(JSON.parse(localStorage.getItem("bluemap-lowresViewDistance") || "0"));
       if (!l || l <= 2000) localStorage.setItem("bluemap-lowresViewDistance", "4000");
-      localStorage.setItem("minenode-bm-hires-v1", "1");
+      localStorage.setItem("varden-bm-hires-v1", "1");
     }
   } catch (e) {}
   var tries = 0;

@@ -1,4 +1,4 @@
-"""Portable MineNode server packages (.minenodepack)."""
+"""Portable Varden server packages (.vardenpack)."""
 from __future__ import annotations
 
 import json
@@ -13,12 +13,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .config import PANEL_DIR, SERVERS_DIR, TMP_DIR, VERSION
+from . import legacy
 from .models import ServerConfig
 
 if TYPE_CHECKING:
     from .manager import Manager, ServerInstance
 
-FORMAT = "minenodepack"
+FORMAT = "vardenpack"
 SCHEMA = 1
 MAX_ENTRIES = 200_000
 MAX_UNCOMPRESSED = 100 * 1024 * 1024 * 1024  # 100 GiB, protects imports from zip bombs
@@ -55,12 +56,12 @@ def create(inst: "ServerInstance") -> Path:
     if inst.running:
         raise PackError("Zatrzymaj serwer przed eksportem, aby zachować spójność świata")
     TMP_DIR.mkdir(parents=True, exist_ok=True)
-    out = TMP_DIR / f"{inst.cfg.subdomain}-{int(time.time())}-{uuid.uuid4().hex[:6]}.minenodepack"
+    out = TMP_DIR / f"{inst.cfg.subdomain}-{int(time.time())}-{uuid.uuid4().hex[:6]}.vardenpack"
     manifest = {
         "format": FORMAT,
         "schema": SCHEMA,
         "created_at": time.time(),
-        "minenode_version": VERSION,
+        "varden_version": VERSION,
         "server_config": inst.cfg.model_dump(mode="json"),
         "contents": "server/",
     }
@@ -78,9 +79,9 @@ def _read_manifest(zf: zipfile.ZipFile) -> dict:
     try:
         manifest = json.loads(zf.read("manifest.json"))
     except (KeyError, ValueError, UnicodeDecodeError) as exc:
-        raise PackError("Niepoprawny plik .minenodepack: brak manifest.json") from exc
-    if manifest.get("format") != FORMAT:
-        raise PackError("To nie jest paczka MineNode")
+        raise PackError("Niepoprawny plik .vardenpack: brak manifest.json") from exc
+    if manifest.get("format") not in legacy.PACK_FORMATS:
+        raise PackError("To nie jest paczka Varden")
     schema = manifest.get("schema")
     if not isinstance(schema, int) or schema < 1 or schema > SCHEMA:
         raise PackError(f"Nieobsługiwana wersja formatu paczki: {schema}")
@@ -102,7 +103,7 @@ def validate(path: Path) -> dict:
                 raise PackError("Paczka jest zbyt duża")
             return _read_manifest(zf)
     except zipfile.BadZipFile as exc:
-        raise PackError("Plik nie jest poprawnym archiwum .minenodepack") from exc
+        raise PackError("Plik nie jest poprawnym archiwum .vardenpack") from exc
 
 
 def import_pack(path: Path, manager: "Manager", name: str | None = None,
@@ -152,6 +153,7 @@ def import_pack(path: Path, manager: "Manager", name: str | None = None,
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 with zf.open(info) as src, open(dest, "wb") as dst:
                     shutil.copyfileobj(src, dst, 1024 * 1024)
+            legacy.migrate_meta_dir(staging)  # packages exported before the rename carry .minenode/
             # The instance is registered only after the staging directory is ready.
             final = SERVERS_DIR / new_id
             os.replace(staging, final)

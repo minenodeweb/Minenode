@@ -8,7 +8,7 @@ from app import api, auth, config
 from app.models import PanelSettings, SERVER_TEXTS_EN
 from app.store import JsonStore
 
-H = {"X-Requested-With": "minenode"}
+H = {"X-Requested-With": "varden"}
 
 
 class FakeManager:

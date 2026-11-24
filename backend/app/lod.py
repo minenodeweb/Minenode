@@ -221,7 +221,7 @@ def _lss_fresh(inst: "ServerInstance") -> str:
     cfg = inst.cfg.lod
     d = cfg.distance
     return (
-        "# Written by MineNode (Add-ons -> Services -> LOD). Missing settings use the mod's defaults.\n"
+        "# Written by Varden (Add-ons -> Services -> LOD). Missing settings use the mod's defaults.\n"
         "config_version: 1\n"
         "lod:\n  distance:\n"
         f"    default_chunks: {d}\n"

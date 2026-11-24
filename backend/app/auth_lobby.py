@@ -14,7 +14,7 @@ from .config import AUTH_LOBBY_DIR, AUTH_LOBBY_PORT
 if TYPE_CHECKING:
     from .manager import Manager
 
-log = logging.getLogger("minenode.auth_lobby")
+log = logging.getLogger("varden.auth_lobby")
 
 
 class AuthLobby:

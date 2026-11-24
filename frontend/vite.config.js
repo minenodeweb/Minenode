@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
-const backend = process.env.MINENODE_BACKEND || 'http://127.0.0.1:8080'
+const backend = process.env.VARDEN_BACKEND || 'http://127.0.0.1:8080'
 
 export default defineConfig({
   plugins: [vue()],

@@ -21,6 +21,7 @@ from typing import Any, Awaitable, Callable, Optional
 import psutil
 
 from . import java as javamod
+from . import legacy
 from . import players as playersmod
 from . import playerstats
 from . import providers
@@ -29,7 +30,7 @@ from .models import PanelSettings, ServerConfig
 from .properties import read_properties, update_properties
 from .store import JsonStore
 
-log = logging.getLogger("minenode")
+log = logging.getLogger("varden")
 
 DEFAULT_ICON = Path(__file__).resolve().parent / "assets" / "server-icon.png"
 BACKEND_HOST = "127.0.0.1"  # game servers listen on loopback only; players reach them through the proxy
@@ -233,6 +234,7 @@ class ServerInstance:
     def __init__(self, manager: "Manager", cfg: ServerConfig):
         self.m = manager
         self.cfg = cfg
+        legacy.migrate_meta_dir(SERVERS_DIR / cfg.id)  # .minenode -> .varden (rename from MineNode)
         self.state = "offline" if cfg.installed else "not_installed"
         self.proc: asyncio.subprocess.Process | None = None
         self.console: deque[dict] = deque(maxlen=4000)
@@ -575,7 +577,7 @@ class ServerInstance:
             return True
         cr = getattr(self, "_chunky", None)
         if cr is None and getattr(getattr(self, "cfg", None), "id", None):
-            if (self.dir / ".minenode" / "chunky.json").is_file():
+            if (self.dir / ".varden" / "chunky.json").is_file():
                 cr = self.chunky_runner
         if cr is not None and (cr.running or cr._pending is not None or (cr.active and not cr.task.get("user_paused"))):
             return True
@@ -809,7 +811,7 @@ class ServerInstance:
 
             if eula:
                 (self.dir / "eula.txt").write_text(
-                    "# Zaakceptowano przez MineNode (https://aka.ms/MinecraftEULA)\neula=true\n")
+                    "# Zaakceptowano przez Varden (https://aka.ms/MinecraftEULA)\neula=true\n")
             self._enforce_properties(initial=True)
             self.ensure_default_icon()
             self.cfg.installed = True
@@ -819,7 +821,7 @@ class ServerInstance:
             self.set_state("offline")
         except Exception as exc:
             self.panel_log(f"BŁĄD instalacji: {exc}")
-            logging.getLogger("minenode").exception("install failed")
+            logging.getLogger("varden").exception("install failed")
             self.set_job(None)
             self.set_state("offline" if self.cfg.installed else "install_failed")
 
@@ -841,7 +843,7 @@ class ServerInstance:
         (self.dir / "server-icon.png").unlink(missing_ok=True)
 
     def ensure_default_icon(self) -> bool:
-        """Give a server without its own server-icon.png the MineNode icon (64×64 PNG).
+        """Give a server without its own server-icon.png the Varden icon (64×64 PNG).
 
         An icon that is already there – uploaded, or shipped by a modpack – is never replaced."""
         icon = self.dir / "server-icon.png"
@@ -850,7 +852,7 @@ class ServerInstance:
         try:
             shutil.copyfile(DEFAULT_ICON, icon)
         except OSError as exc:
-            logging.getLogger("minenode").warning("Could not write the default server icon: %s", exc)
+            logging.getLogger("varden").warning("Could not write the default server icon: %s", exc)
             return False
         return True
 
@@ -863,7 +865,7 @@ class ServerInstance:
                 changes["motd"] = f"{self.cfg.name}"
             if "enable-status" not in props:
                 changes["enable-status"] = "true"
-        # Players always come in through the MineNode proxy (which talks to 127.0.0.1). Listening on
+        # Players always come in through the Varden proxy (which talks to 127.0.0.1). Listening on
         # loopback only means nobody can reach the server port directly and skip the proxy's
         # /login check (e.g. with host networking or a bare-metal install).
         if props.get("server-ip") != BACKEND_HOST:
@@ -1133,7 +1135,7 @@ class ServerInstance:
             del self.online[n]
         return bool(found)
 
-    # The MineNode proxy sees every game connection (Java and Bedrock through Geyser), so it is the
+    # The Varden proxy sees every game connection (Java and Bedrock through Geyser), so it is the
     # reliable source of who is online: join/leave log lines can be renamed or switched off by plugins,
     # and Bedrock names (".Steve", spaces) never match the log patterns.
     PROXY_PLAYED = 15  # seconds a connection must last to count as "played" (not a whitelist kick)

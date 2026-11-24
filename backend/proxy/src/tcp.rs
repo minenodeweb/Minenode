@@ -203,7 +203,7 @@ pub async fn run_tcp_server(
                     });
                 }
                 Err(e) => {
-                    eprintln!("[minenode-proxy] TCP accept error: {e}");
+                    eprintln!("[varden-proxy] TCP accept error: {e}");
                     tokio::time::sleep(Duration::from_millis(25)).await;
                 }
             }
@@ -602,7 +602,7 @@ fn build_http_head(status: &str, headers: &[(String, String)]) -> String {
         head.push_str(v);
         head.push_str("\r\n");
     }
-    head.push_str("Connection: close\r\nServer: MineNode\r\n\r\n");
+    head.push_str("Connection: close\r\nServer: Varden\r\n\r\n");
     head
 }
 

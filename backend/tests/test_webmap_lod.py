@@ -91,14 +91,14 @@ def test_dynmap_config_is_loopback_without_web_chat_and_follows_options(tmp_path
     assert "deftemplatesuffix: lowres" in text
     assert "    allowwebchat: false" in text
     assert "    sendposition: false" in text and "display-whitelist: true" in text
-    templates = (cfg.parent / "templates" / "custom-minenode.txt").read_text()
+    templates = (cfg.parent / "templates" / "custom-varden.txt").read_text()
     assert "normal-lowres:" in templates and "nether-lowres:" in templates and "the_end-lowres:" in templates
     assert "name: flat" in templates and "name: surface" not in templates and "cave" not in templates
 
     inst.cfg.webmap.render_3d = True
     inst.cfg.webmap.show_players = True
     webmap.dynmap_write_config(inst)
-    assert "name: surface" in (cfg.parent / "templates" / "custom-minenode.txt").read_text()
+    assert "name: surface" in (cfg.parent / "templates" / "custom-varden.txt").read_text()
     text = cfg.read_text()
     assert "    sendposition: true" in text and "display-whitelist: false" in text
     assert "    allowwebchat: false" in text  # web chat stays off
@@ -156,7 +156,7 @@ def test_bluemap_first_start_only_generates_configs_then_accepts(tmp_path):
     m = (d / "maps" / "world.conf").read_text()
     assert "enable-hires: true" in m and "enable-perspective-view: false" in m
     assert "enable-free-flight-view: false" in m and "enable-flat-view: true" in m
-    assert not (d / ".minenode-force-update").exists()
+    assert not (d / ".varden-force-update").exists()
     assert webmap.bluemap_write_config(inst) is False  # nothing to change any more, accepted stays
 
     inst.cfg.webmap.render_3d = True
@@ -164,7 +164,7 @@ def test_bluemap_first_start_only_generates_configs_then_accepts(tmp_path):
     m = (d / "maps" / "world.conf").read_text()
     assert "enable-hires: true" in m and "enable-perspective-view: true" in m and "enable-free-flight-view: true" in m
     assert "default-to-flat-view: false" in (d / "webapp.conf").read_text()
-    assert (d / ".minenode-force-update").is_file()
+    assert (d / ".varden-force-update").is_file()
 
 
 def test_bluemap_heals_legacy_hires_false_and_reloads_online(tmp_path):
@@ -181,14 +181,14 @@ def test_bluemap_heals_legacy_hires_false_and_reloads_online(tmp_path):
 
     assert webmap.bluemap_write_config(inst) is True
     assert "enable-hires: true" in (d / "maps" / "world.conf").read_text(encoding="utf-8")
-    assert (d / ".minenode-force-update").is_file()
+    assert (d / ".varden-force-update").is_file()
 
     async def scenario():
         await webmap.apply_online_changes(inst)
         await asyncio.sleep(0)
 
     asyncio.run(scenario())
-    assert not (d / ".minenode-force-update").exists()
+    assert not (d / ".varden-force-update").exists()
     assert sent == ["bluemap reload", "bluemap force-update world"]
 
 
@@ -573,7 +573,7 @@ def test_lod_prepare_disables_switched_off_addons(tmp_path, monkeypatch):
     assert (mods / "lod-server-support-fabric-0.22.0+1.21.11.jar.disabled").exists()
     assert not (mods / "voxy-server-side-fabric.jar").exists()  # the panel's old copy of the same mod is gone
     assert (mods / "voxy-server-side-neoforge.jar").exists()  # a manual install stays
-    files = json.loads((tmp_path / ".minenode" / "content.json").read_text())["files"]
+    files = json.loads((tmp_path / ".varden" / "content.json").read_text())["files"]
     assert "voxy-server-side-fabric.jar" not in files and "lod-server-support-fabric-0.22.0+1.21.11.jar" in files
 
 
@@ -735,7 +735,7 @@ def test_bluemap_disk_fastpath_serves_gzipped_tiles_and_injects_hires_boost(tmp_
 
     client = TestClient(app)
     idx = client.get("/map/srv1/index.html")
-    assert idx.status_code == 200 and "minenode-bm-hires-v1" in idx.text
+    assert idx.status_code == 200 and "varden-bm-hires-v1" in idx.text
 
     res = client.get("/map/srv1/maps/world/tiles/0/x0/z0.prbm", headers={"Accept-Encoding": "gzip"})
     assert res.status_code == 200 and res.content == b"PRBM"

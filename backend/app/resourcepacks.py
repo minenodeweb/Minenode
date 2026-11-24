@@ -26,7 +26,7 @@ MAX_SIZE = 250 * 1024 * 1024  # client limit (1.18+)
 
 
 def packs_dir(inst: "ServerInstance") -> Path:
-    return inst.dir / ".minenode" / "resourcepacks"
+    return inst.dir / ".varden" / "resourcepacks"
 
 
 def _index_path(inst: "ServerInstance") -> Path:

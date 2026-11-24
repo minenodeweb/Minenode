@@ -47,9 +47,9 @@ class Storage:
         raise NotImplementedError
 
     async def test(self) -> None:
-        key = ".minenode-test"
-        await self.write_bytes(key, b"MineNode write test\n")
-        if (await self.read_bytes(key)).strip() != b"MineNode write test":
+        key = ".varden-test"
+        await self.write_bytes(key, b"Varden write test\n")
+        if (await self.read_bytes(key)).strip() != b"Varden write test":
             raise StorageError("Odczytany plik testowy różni się od zapisanego")
         await self.delete(key)
 

@@ -28,7 +28,7 @@ if ($LASTEXITCODE -ne 0) {
 
 Copy-Item -LiteralPath (Join-Path $root 'extension.yml') -Destination $classes
 
-$outJar = Join-Path $root 'MineNodeRouter.jar'
+$outJar = Join-Path $root 'VardenRouter.jar'
 & jar --create --file $outJar -C $classes .
 if ($LASTEXITCODE -ne 0) {
     throw "jar failed with exit code $LASTEXITCODE"
@@ -44,7 +44,7 @@ if ($Test) {
     if ($LASTEXITCODE -ne 0) {
         throw "test javac failed with exit code $LASTEXITCODE"
     }
-    & java -classpath "$classes$([IO.Path]::PathSeparator)$testClasses" pl.minenode.router.RouteTableTest
+    & java -classpath "$classes$([IO.Path]::PathSeparator)$testClasses" pl.varden.router.RouteTableTest
     if ($LASTEXITCODE -ne 0) {
         throw "RouteTableTest failed with exit code $LASTEXITCODE"
     }

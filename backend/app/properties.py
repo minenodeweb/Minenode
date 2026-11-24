@@ -85,7 +85,7 @@ def read_properties(path: Path) -> dict[str, str]:
 
 
 def write_properties(path: Path, props: dict[str, str]) -> None:
-    lines = ["#Minecraft server properties", f"#Managed by MineNode – {time.strftime('%a %b %d %H:%M:%S %Y')}"]
+    lines = ["#Minecraft server properties", f"#Managed by Varden – {time.strftime('%a %b %d %H:%M:%S %Y')}"]
     for k, v in props.items():
         lines.append(f"{_escape(k, True)}={_escape(str(v))}")
     atomic_write_text(path, "\n".join(lines) + "\n")

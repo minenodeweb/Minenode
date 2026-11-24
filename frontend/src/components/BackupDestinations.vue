@@ -65,7 +65,7 @@
             </div>
             <div class="field">
               <label>{{ $t('Folder w buckecie (prefiks)') }}</label>
-              <input v-model="form.prefix" class="input mono" placeholder="minenode" />
+              <input v-model="form.prefix" class="input mono" placeholder="varden" />
             </div>
           </div>
           <div class="grid grid-2">
@@ -152,7 +152,7 @@ const PROVIDERS = [
   { name: 'Wasabi', endpoint: 'https://s3.eu-central-1.wasabisys.com', region: 'eu-central-1', path_style: false },
   { name: 'MinIO', endpoint: 'http://minio:9000', region: 'us-east-1', path_style: true },
 ]
-const BLANK = { name: '', type: 'folder', path: '', endpoint: '', region: '', bucket: '', prefix: 'minenode', access_key: '', secret_key: '', path_style: false, url: '', username: '', password: '' }
+const BLANK = { name: '', type: 'folder', path: '', endpoint: '', region: '', bucket: '', prefix: 'varden', access_key: '', secret_key: '', path_style: false, url: '', username: '', password: '' }
 
 const items = ref([])
 const results = reactive({})

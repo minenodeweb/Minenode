@@ -20,7 +20,7 @@ from .store import atomic_write_text
 if TYPE_CHECKING:
     from .manager import ServerInstance
 
-log = logging.getLogger("minenode.squaremap")
+log = logging.getLogger("varden.squaremap")
 
 PROJECT_ID = "PFb7ZqK6"  # squaremap on Modrinth
 PROJECT_SLUG = "squaremap"

@@ -1,4 +1,4 @@
-"""Shared MineNodeAuth account and session file used by the TCP proxy and PicoLimbo lobby.
+"""Shared VardenAuth account and session file used by the TCP proxy and PicoLimbo lobby.
 
 The file is a simple tab-separated database with one row per registered player:
 
@@ -22,7 +22,7 @@ import time
 
 from .config import DATA_DIR
 
-log = logging.getLogger("minenode.auth")
+log = logging.getLogger("varden.auth")
 
 SESSION_FILE = DATA_DIR / "auth" / "sessions.db"
 PENDING_FILE = DATA_DIR / "auth" / "pending.db"

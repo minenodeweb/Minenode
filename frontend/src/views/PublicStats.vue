@@ -3,7 +3,7 @@
     <header class="topbar">
       <a href="/" class="brand">
         <BrandMark />
-        <span class="brand-name">MineNode</span>
+        <span class="brand-name">Varden</span>
       </a>
       <span class="spacer" />
       <router-link v-if="auth.user && data" :to="`/servers/${data.server.id}`" class="btn sm ghost"><Settings2 /> {{ $t('Zarządzaj w panelu') }}</router-link>
@@ -195,7 +195,7 @@
         <footer class="foot tiny muted">
           <span>{{ $t('Dane odświeżają się automatycznie.') }}</span>
           <span class="spacer" />
-          <span>{{ $t('Strona serwera hostowanego w MineNode') }}</span>
+          <span>{{ $t('Strona serwera hostowanego w Varden') }}</span>
         </footer>
       </template>
     </main>
@@ -353,7 +353,7 @@ watchEffect(() => {
   } else if (data.value) {
     document.title = `${s.value.name} · ${t('Publiczna strona ze statystykami serwera')}`
   } else if (disabled.value) {
-    document.title = 'MineNode'
+    document.title = 'Varden'
   }
 })
 const onVisibilityChange = () => { if (document.visibilityState === 'visible') load() }
@@ -367,7 +367,7 @@ onUnmounted(() => {
   document.removeEventListener('visibilitychange', onVisibilityChange)
   clearInterval(poll)
   clearInterval(clock)
-  document.title = 'MineNode'
+  document.title = 'Varden'
 })
 </script>
 <style scoped>

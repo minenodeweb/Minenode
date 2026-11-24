@@ -5,8 +5,8 @@
         <h1>{{ $t('Nowy serwer') }}</h1>
         <div class="sub">{{ $t('Panel pobierze pliki serwera i odpowiednią wersję Javy automatycznie.') }}</div>
       </div>
-      <button class="btn" :disabled="busy" @click="$refs.packInput.click()"><Upload /> {{ $t('Importuj .minenodepack') }}</button>
-      <input ref="packInput" type="file" accept=".minenodepack" hidden @change="importPack" />
+      <button class="btn" :disabled="busy" @click="$refs.packInput.click()"><Upload /> {{ $t('Importuj .vardenpack') }}</button>
+      <input ref="packInput" type="file" accept=".vardenpack,.minenodepack" hidden @change="importPack" />
       <router-link to="/modpacks" class="btn"><Package /> {{ $t('Zamiast tego: modpack') }}</router-link>
     </div>
 

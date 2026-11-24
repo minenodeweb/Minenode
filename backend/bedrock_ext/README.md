@@ -1,14 +1,14 @@
-# MineNode Bedrock router extension
+# Varden Bedrock router extension
 
 Geyser Standalone extension used by `backend/app/bedrock.py`.
 
 It reads `routes.properties` from its Geyser data folder
-(`extensions/minenode-router/routes.properties`), chooses the MineNode server from the hostname the
+(`extensions/varden-router/routes.properties`), chooses the Varden server from the hostname the
 Bedrock player typed, and sets that server's online/offline authentication mode on each
 `SessionLoginEvent`. Unknown or disabled hosts are rejected with a friendly message.
 
 The extension is compiled during the Docker build (and can be rebuilt locally with the scripts
-below), so the runtime image does not need a JDK. The committed `MineNodeRouter.jar` is only a
+below), so the runtime image does not need a JDK. The committed `VardenRouter.jar` is only a
 development convenience; the image never uses it.
 
 ## Build (Windows)

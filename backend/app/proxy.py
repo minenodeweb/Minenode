@@ -1,7 +1,7 @@
 """Minecraft-aware reverse proxy control plane and Rust data-plane supervisor.
 
 The high-throughput TCP (:25565) and Simple Voice Chat UDP (:24454) transport runs in the native
-``minenode-proxy`` Rust binary. Python keeps all routing, authentication, whitelist, start-on-join,
+``varden-proxy`` Rust binary. Python keeps all routing, authentication, whitelist, start-on-join,
 resource-pack token verification, MOTD rendering, and passive client-fingerprint logic, communicating
 over an authenticated newline-delimited JSON IPC channel (Unix socket on Linux/macOS, loopback TCP
 on Windows).
@@ -32,7 +32,7 @@ if TYPE_CHECKING:
     from .fingerprint import PacketSniffer
     from .manager import Manager, ServerInstance
 
-log = logging.getLogger("minenode.proxy")
+log = logging.getLogger("varden.proxy")
 
 FORMATTING_RE = re.compile("\u00a7.")
 _RP_PATH_RE = re.compile(r"^/rp/([0-9a-f]{6,32})/([A-Za-z0-9_-]{8,64})/([0-9a-f]{12})\.zip(\?.*)?$")
@@ -232,11 +232,11 @@ class MinecraftProxy:
                 with contextlib.suppress(asyncio.TimeoutError):
                     await asyncio.wait_for(self._ready_event.wait(), 5)
             if self._watch_task is None or self._watch_task.done():
-                self._watch_task = asyncio.create_task(self._watch(), name="minenode-proxy-watch")
+                self._watch_task = asyncio.create_task(self._watch(), name="varden-proxy-watch")
         except Exception as exc:  # noqa: BLE001
             self.listening = False
             self.error = str(exc)
-            log.error("Failed to start minenode-proxy: %s", exc)
+            log.error("Failed to start varden-proxy: %s", exc)
 
     async def stop(self) -> None:
         self._stopping = True
@@ -282,7 +282,7 @@ class MinecraftProxy:
             return
         self._ipc_token = secrets.token_hex(32)
         if sys.platform != "win32":
-            sock_path = Path(tempfile.gettempdir()) / f"minenode-proxy-{os.getpid()}-{secrets.token_hex(6)}.sock"
+            sock_path = Path(tempfile.gettempdir()) / f"varden-proxy-{os.getpid()}-{secrets.token_hex(6)}.sock"
             sock_path.unlink(missing_ok=True)
             self._ipc_path = sock_path
             self._ipc_addr = f"unix:{sock_path}"
@@ -319,10 +319,10 @@ class MinecraftProxy:
     async def _spawn_proc(self, bin_path: Path) -> None:
         self._ready_event = asyncio.Event()
         env = os.environ.copy()
-        env["MINENODE_IPC_ADDR"] = self._ipc_addr or ""
-        env["MINENODE_IPC_TOKEN"] = self._ipc_token
-        env["MINENODE_TCP_BIND"] = f"{self.host}:{self.port}"
-        env["MINENODE_UDP_BIND"] = f"{self.voice_host}:{self.voice_port}"
+        env["VARDEN_IPC_ADDR"] = self._ipc_addr or ""
+        env["VARDEN_IPC_TOKEN"] = self._ipc_token
+        env["VARDEN_TCP_BIND"] = f"{self.host}:{self.port}"
+        env["VARDEN_UDP_BIND"] = f"{self.voice_host}:{self.voice_port}"
         self._proc = await asyncio.create_subprocess_exec(
             str(bin_path),
             env=env,
@@ -334,7 +334,7 @@ class MinecraftProxy:
             self._log_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await self._log_task
-        self._log_task = asyncio.create_task(self._read_proc_output(self._proc), name="minenode-proxy-log")
+        self._log_task = asyncio.create_task(self._read_proc_output(self._proc), name="varden-proxy-log")
 
     async def _read_proc_output(self, proc: asyncio.subprocess.Process) -> None:
         if not proc.stdout:
@@ -343,11 +343,11 @@ class MinecraftProxy:
             async for raw in proc.stdout:
                 text = raw.decode("utf-8", "replace").strip()
                 if text:
-                    log.info("[minenode-proxy] %s", text)
+                    log.info("[varden-proxy] %s", text)
         except asyncio.CancelledError:
             raise
         except Exception:  # noqa: BLE001
-            log.exception("Reading minenode-proxy output failed")
+            log.exception("Reading varden-proxy output failed")
 
     async def _watch(self) -> None:
         while not self._stopping:
@@ -375,7 +375,7 @@ class MinecraftProxy:
             try:
                 await self._spawn_proc(bin_path)
             except Exception as exc:  # noqa: BLE001
-                log.exception("Failed to restart minenode-proxy: %s", exc)
+                log.exception("Failed to restart varden-proxy: %s", exc)
 
     def send_command(self, msg: dict[str, Any]) -> bool:
         writer = self._ipc_writer
@@ -720,7 +720,7 @@ class MinecraftProxy:
 
         status = "404 Not Found"
         headers = [["Content-Type", "text/plain; charset=utf-8"]]
-        body = b"MineNode resource pack host\n"
+        body = b"Varden resource pack host\n"
         m = _RP_PATH_RE.match(path)
         if method not in ("GET", "HEAD"):
             status = "405 Method Not Allowed"

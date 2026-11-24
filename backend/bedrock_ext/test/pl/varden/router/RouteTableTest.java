@@ -1,4 +1,4 @@
-package pl.minenode.router;
+package pl.varden.router;
 
 import java.util.List;
 

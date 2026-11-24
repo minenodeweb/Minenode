@@ -1,7 +1,7 @@
 """Chunky integration: world pre-generation from the server's Add-ons tab.
 
 Chunky (https://modrinth.com/plugin/chunky) is a plugin on Paper/Purpur and a mod on Fabric/Quilt/
-Forge/NeoForge. MineNode installs the build for the server's engine and Minecraft version, keeps the
+Forge/NeoForge. Varden installs the build for the server's engine and Minecraft version, keeps the
 generation settings (world, shape, pattern, center, radius) and drives Chunky through console
 commands. Progress is read from Chunky's own log lines (common/src/main/resources/lang/en.json).
 
@@ -34,7 +34,7 @@ from .store import atomic_write_text
 if TYPE_CHECKING:
     from .manager import ServerInstance
 
-log = logging.getLogger("minenode.chunky")
+log = logging.getLogger("varden.chunky")
 
 PROJECT_ID = "fALzjamp"   # Chunky on Modrinth
 C2ME_ID = "VSNURh3q"      # C2ME (Fabric) on Modrinth
@@ -170,7 +170,7 @@ def prepare(inst: "ServerInstance") -> None:
     """Settings Chunky needs from the server, applied before a start.
 
     Minecraft 1.21.2+ pauses an empty server after ``pause-when-empty-seconds`` – generation while
-    nobody plays would stop (Chunky itself rewrites the key and asks for a restart). MineNode turns
+    nobody plays would stop (Chunky itself rewrites the key and asks for a restart). Varden turns
     it off up front while Chunky is installed.
     """
     from .properties import read_properties, update_properties
@@ -243,10 +243,10 @@ class ChunkyRunner:
 
     def __init__(self, inst: "ServerInstance"):
         self.inst = inst
-        self._file = inst.dir / ".minenode" / "chunky.json"
+        self._file = inst.dir / ".varden" / "chunky.json"
         self.task: dict = self._load()   # persisted: the task the user started from the panel
         self.running = False              # Chunky is generating right now
-        self.auto_paused = False          # paused by MineNode because somebody plays
+        self.auto_paused = False          # paused by Varden because somebody plays
         self._pending: tuple[str, float] | None = None  # (command sent, when) waiting for a confirmation
 
     # ---------------------------------------------------------------- persistence

@@ -4,7 +4,7 @@
       <router-link to="/" class="brand" @click="ui.sidebarOpen = false">
         <BrandMark />
         <div>
-          <div class="brand-name">MineNode</div>
+          <div class="brand-name">Varden</div>
           <div class="brand-sub">{{ $t('Minecraft server panel') }}</div>
         </div>
       </router-link>

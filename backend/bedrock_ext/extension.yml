@@ -1,7 +1,7 @@
-id: minenode-router
-name: MineNodeRouter
+id: varden-router
+name: VardenRouter
 version: 1.0.6
-main: pl.minenode.router.MineNodeRouter
+main: pl.varden.router.VardenRouter
 api: 2.9.2
 authors:
-  - MineNode
+  - Varden

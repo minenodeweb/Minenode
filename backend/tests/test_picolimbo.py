@@ -56,14 +56,14 @@ def test_missing_binary_raises_clear_error():
         "tag": None,
         "built_at": None,
     }
-    with pytest.raises(picolimbo.PicoLimboError, match="MINENODE_PICOLIMBO_BINARY"):
+    with pytest.raises(picolimbo.PicoLimboError, match="VARDEN_PICOLIMBO_BINARY"):
         picolimbo.binary()
 
 
 def test_local_binary_override(tmp_path, monkeypatch):
     local = tmp_path / "my_pico_limbo"
     monkeypatch.setattr(picolimbo, "LOCAL_OVERRIDE", str(local))
-    with pytest.raises(picolimbo.PicoLimboError, match="MINENODE_PICOLIMBO_BINARY"):
+    with pytest.raises(picolimbo.PicoLimboError, match="VARDEN_PICOLIMBO_BINARY"):
         picolimbo.binary()
 
     local.write_text("x", encoding="utf-8")

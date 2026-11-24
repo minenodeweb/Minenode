@@ -5,7 +5,7 @@
 ## Overview
 
 ```
-                 ┌──────────────────────────── minenode container ───────────────────────────┐
+                 ┌──────────────────────────── varden container ───────────────────────────┐
  browser ───────▶│ :8080  FastAPI ── REST /api/* ── WebSocket /api/servers/{id}/ws            │
                  │          │           Vue 3 SPA (static files)                              │
                  │          ▼                                                                 │
@@ -13,9 +13,9 @@
                  │          ▲                                                                 │
                  │          │ IPC (Unix socket, auth/routing/MOTD/events only)                │
                  │          ▼                                                                 │
- Minecraft ─────▶│ :25565 minenode-proxy (Rust/tokio) ── TCP tunnel / HTTP resource packs     │
- voice (UDP) ───▶│ :24454 minenode-proxy (Rust/tokio) ── UUID → internal SVC port (:24500…)   │
- Bedrock ───────▶│ :19132 Geyser + MineNodeRouter ── hostname ──▶ :25565 proxy                │
+ Minecraft ─────▶│ :25565 varden-proxy (Rust/tokio) ── TCP tunnel / HTTP resource packs     │
+ voice (UDP) ───▶│ :24454 varden-proxy (Rust/tokio) ── UUID → internal SVC port (:24500…)   │
+ Bedrock ───────▶│ :19132 Geyser + VardenRouter ── hostname ──▶ :25565 proxy                │
                  │   Java (Temurin, auto)   Providers (Mojang/Paper/Purpur/Fabric/…)          │
                  │   Backups (zip)          Modpacks & content (Modrinth / CurseForge)        │
                  └──────────────────────────────────── /data ─────────────────────────────────┘
@@ -58,11 +58,11 @@
 ```
 /data
 ├── servers/<id>/          # server files (world, mods/, plugins/, server.properties…)
-│   └── .minenode/         # panel metadata: content.json (mods/plugins), resourcepacks/
+│   └── .varden/         # panel metadata: content.json (mods/plugins), resourcepacks/
 ├── backups/<id>/*.zip     # backups + .json metadata
 ├── java/temurin-<N>/      # downloaded Java runtimes
 ├── panel/                 # servers.json, settings.json, users.json, secret.key, players/
-├── bedrock/               # Geyser jar, config.yml, logs, extensions/MineNodeRouter
+├── bedrock/               # Geyser jar, config.yml, logs, extensions/VardenRouter
 ├── auth-lobby/            # hidden PicoLimbo authentication lobby and config
 ├── auth/                  # player credentials, sessions and informational client fingerprints
 └── tmp/                   # temporary install files
@@ -73,7 +73,7 @@
 ```bash
 # backend
 cd backend && python -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt
-MINENODE_DATA=./data MINENODE_PROXY_PORT=25599 MINENODE_VOICE_PORT=24499 MINENODE_BEDROCK_PORT=19199 uvicorn app.main:app --reload --port 8080
+VARDEN_DATA=./data VARDEN_PROXY_PORT=25599 VARDEN_VOICE_PORT=24499 VARDEN_BEDROCK_PORT=19199 uvicorn app.main:app --reload --port 8080
 
 # frontend (proxies /api to :8080, hot reload)
 cd frontend && npm install && npm run dev
@@ -87,7 +87,7 @@ API docs (OpenAPI): `http://localhost:8080/api/docs`.
 Building the image yourself:
 
 ```bash
-docker build -t minenode:dev .
+docker build -t varden:dev .
 ```
 
 ## Security
@@ -97,7 +97,7 @@ docker build -t minenode:dev .
 - State-changing requests require an `X-Requested-With` header (CSRF protection), and the WebSocket checks `Origin`.
 - Logins are limited to 8 attempts per IP and 20 per account every 5 minutes, counted before the password is checked. Unknown usernames take as long as known ones, and an open console closes when its session is no longer valid (password change, deleted account).
 - Logging out revokes that session cookie on the server, and cookies are tied to the account they were issued for (a deleted and re-created user does not inherit old sessions).
-- Game servers listen on `127.0.0.1` only. Players always come in through the MineNode proxy, which refuses logins whose player name it cannot read instead of passing them through.
+- Game servers listen on `127.0.0.1` only. Players always come in through the Varden proxy, which refuses logins whose player name it cannot read instead of passing them through.
 - Paths in the file manager, modpack archives and backups are checked against directory traversal (zip-slip).
 - Resource pack URLs contain an unguessable token, and the voice ports of individual servers are bound to `127.0.0.1`.
 - Servers start with `-Dlog4j2.formatMsgNoLookups=true` (Log4Shell protection for older versions).

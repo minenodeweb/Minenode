@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 
 VERSION = "1.0.0"
-APP_NAME = "MineNode"
+APP_NAME = "Varden"
 
 
 def _env_int(name: str, default: int) -> int:
@@ -15,7 +15,7 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
-DATA_DIR = Path(os.environ.get("MINENODE_DATA", "/data")).resolve()
+DATA_DIR = Path(os.environ.get("VARDEN_DATA", "/data")).resolve()
 SERVERS_DIR = DATA_DIR / "servers"
 BACKUPS_DIR = DATA_DIR / "backups"
 JAVA_DIR = DATA_DIR / "java"
@@ -24,31 +24,31 @@ PANEL_DIR = DATA_DIR / "panel"
 TMP_DIR = DATA_DIR / "tmp"
 AUTH_LOBBY_DIR = DATA_DIR / "auth-lobby"
 
-PANEL_HOST = os.environ.get("MINENODE_HOST", "0.0.0.0")
-PANEL_PORT = _env_int("MINENODE_PORT", 8080)
-PROXY_HOST = os.environ.get("MINENODE_PROXY_HOST", "0.0.0.0")
-PROXY_PORT = _env_int("MINENODE_PROXY_PORT", 25565)
-INTERNAL_PORT_START = _env_int("MINENODE_INTERNAL_PORT_START", 25600)
-VOICE_HOST = os.environ.get("MINENODE_VOICE_HOST", PROXY_HOST)
-VOICE_PORT = _env_int("MINENODE_VOICE_PORT", 24454)  # shared public UDP port for Simple Voice Chat
-INTERNAL_VOICE_PORT_START = _env_int("MINENODE_INTERNAL_VOICE_PORT_START", 24500)
-INTERNAL_MAP_PORT_START = _env_int("MINENODE_INTERNAL_MAP_PORT_START", 28100)  # loopback web servers of Dynmap/BlueMap
-AUTH_LOBBY_PORT = _env_int("MINENODE_AUTH_LOBBY_PORT", 25999)
-BEDROCK_HOST = os.environ.get("MINENODE_BEDROCK_HOST", PROXY_HOST)
-BEDROCK_PORT = _env_int("MINENODE_BEDROCK_PORT", 19132)  # shared public port (TCP signaling + UDP gameplay) for Geyser
+PANEL_HOST = os.environ.get("VARDEN_HOST", "0.0.0.0")
+PANEL_PORT = _env_int("VARDEN_PORT", 8080)
+PROXY_HOST = os.environ.get("VARDEN_PROXY_HOST", "0.0.0.0")
+PROXY_PORT = _env_int("VARDEN_PROXY_PORT", 25565)
+INTERNAL_PORT_START = _env_int("VARDEN_INTERNAL_PORT_START", 25600)
+VOICE_HOST = os.environ.get("VARDEN_VOICE_HOST", PROXY_HOST)
+VOICE_PORT = _env_int("VARDEN_VOICE_PORT", 24454)  # shared public UDP port for Simple Voice Chat
+INTERNAL_VOICE_PORT_START = _env_int("VARDEN_INTERNAL_VOICE_PORT_START", 24500)
+INTERNAL_MAP_PORT_START = _env_int("VARDEN_INTERNAL_MAP_PORT_START", 28100)  # loopback web servers of Dynmap/BlueMap
+AUTH_LOBBY_PORT = _env_int("VARDEN_AUTH_LOBBY_PORT", 25999)
+BEDROCK_HOST = os.environ.get("VARDEN_BEDROCK_HOST", PROXY_HOST)
+BEDROCK_PORT = _env_int("VARDEN_BEDROCK_PORT", 19132)  # shared public port (TCP signaling + UDP gameplay) for Geyser
 BEDROCK_SAVED_LOGINS = tuple(
-    name.strip() for name in os.environ.get("MINENODE_BEDROCK_SAVED_LOGINS", "").split(",") if name.strip()
+    name.strip() for name in os.environ.get("VARDEN_BEDROCK_SAVED_LOGINS", "").split(",") if name.strip()
 )
 
 CURSEFORGE_API_KEY_ENV = os.environ.get("CURSEFORGE_API_KEY", "")
-SECURE_COOKIES = os.environ.get("MINENODE_SECURE_COOKIES", "false").lower() in ("1", "true", "yes")
+SECURE_COOKIES = os.environ.get("VARDEN_SECURE_COOKIES", "false").lower() in ("1", "true", "yes")
 
-STATIC_DIR = Path(os.environ.get("MINENODE_STATIC", Path(__file__).resolve().parent.parent / "static"))
-PROXY_BIN = Path(os.environ.get("MINENODE_PROXY_BIN", Path(__file__).resolve().parent.parent / "bin" / "minenode-proxy"))
-PICOLIMBO_BIN = Path(os.environ.get("MINENODE_PICOLIMBO_BINARY", Path(__file__).resolve().parent.parent / "bin" / "pico_limbo"))
-PICOLIMBO_META = Path(os.environ.get("MINENODE_PICOLIMBO_META", PICOLIMBO_BIN.with_name("picolimbo-version.json")))
+STATIC_DIR = Path(os.environ.get("VARDEN_STATIC", Path(__file__).resolve().parent.parent / "static"))
+PROXY_BIN = Path(os.environ.get("VARDEN_PROXY_BIN", Path(__file__).resolve().parent.parent / "bin" / "varden-proxy"))
+PICOLIMBO_BIN = Path(os.environ.get("VARDEN_PICOLIMBO_BINARY", Path(__file__).resolve().parent.parent / "bin" / "pico_limbo"))
+PICOLIMBO_META = Path(os.environ.get("VARDEN_PICOLIMBO_META", PICOLIMBO_BIN.with_name("picolimbo-version.json")))
 
-USER_AGENT = f"minenode-panel/{VERSION} (self-hosted Minecraft server manager)"
+USER_AGENT = f"varden-panel/{VERSION} (self-hosted Minecraft server manager)"
 
 
 def ensure_dirs() -> None:

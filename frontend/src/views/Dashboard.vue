@@ -38,8 +38,8 @@
           <button :class="{ active: view === 'grid' }" :title="$t('Kafelki')" @click="view = 'grid'"><LayoutGrid /></button>
           <button :class="{ active: view === 'list' }" :title="$t('Lista')" @click="view = 'list'"><List /></button>
         </div>
-        <button class="btn" @click="$refs.packInput.click()"><Upload /> {{ $t('Importuj .minenodepack') }}</button>
-        <input ref="packInput" type="file" accept=".minenodepack" hidden @change="importPack" />
+        <button class="btn" @click="$refs.packInput.click()"><Upload /> {{ $t('Importuj .vardenpack') }}</button>
+        <input ref="packInput" type="file" accept=".vardenpack,.minenodepack" hidden @change="importPack" />
         <router-link to="/modpacks" class="btn"><Package /> {{ $t('Importuj modpack') }}</router-link>
         <router-link to="/new" class="btn primary"><Plus /> {{ $t('Nowy serwer') }}</router-link>
       </div>
@@ -96,7 +96,7 @@ import { toast, toastError } from '../store'
 import { ENGINE_META, compact, copyText, formatBytes, formatMB, stateTone } from '../utils'
 
 const read = (k, d) => { try { return localStorage.getItem(k) || d } catch { return d } }
-const view = ref(read('minenode-dash-view', 'grid'))
+const view = ref(read('varden-dash-view', read('minenode-dash-view', 'grid')))
 
 const sys = ref(null)
 const now = ref(Date.now() / 1000)
@@ -132,7 +132,7 @@ onMounted(() => {
   t = setInterval(() => { now.value = Date.now() / 1000; if (document.visibilityState === 'visible') loadSys() }, 5000)
 })
 onUnmounted(() => clearInterval(t))
-const saveView = () => { try { localStorage.setItem('minenode-dash-view', view.value) } catch {} }
+const saveView = () => { try { localStorage.setItem('varden-dash-view', view.value) } catch {} }
 watch(view, saveView)
 
 async function power(s, action) {

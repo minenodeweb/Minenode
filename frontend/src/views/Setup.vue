@@ -4,7 +4,7 @@
       <div class="brand">
         <BrandMark />
         <div>
-          <div class="brand-name">MineNode</div>
+          <div class="brand-name">Varden</div>
           <div class="small muted">{{ $t('Pierwsza konfiguracja panelu') }}</div>
         </div>
       </div>

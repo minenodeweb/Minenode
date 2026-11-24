@@ -89,7 +89,7 @@ def test_installed_info_reads_metadata_and_ignores_addons(tmp_path):
     assert info["version_number"] == "1.2.0"
     assert info["managed"] is False
 
-    meta = tmp_path / ".minenode" / "content.json"
+    meta = tmp_path / ".varden" / "content.json"
     meta.parent.mkdir()
     meta.write_text(json.dumps({"files": {core.name: {
         "project_id": squaremap.PROJECT_ID, "version_id": "abc", "version_number": "1.2.0"}}}))
@@ -123,7 +123,7 @@ def test_disable_and_enable_jar_keeps_addons(tmp_path):
 
 def test_stale_metadata_for_a_deleted_jar_is_ignored(tmp_path):
     inst = _paper(tmp_path)
-    meta = tmp_path / ".minenode" / "content.json"
+    meta = tmp_path / ".varden" / "content.json"
     meta.parent.mkdir()
     meta.write_text(json.dumps({"files": {"squaremap-paper-mc1.21.4-1.2.0.jar": {
         "project_id": squaremap.PROJECT_ID, "version_id": "abc", "version_number": "1.2.0"}}}))
@@ -158,7 +158,7 @@ def test_ensure_disables_a_managed_jar_but_keeps_a_manual_one(tmp_path):
     mods.mkdir()
     jar = mods / "squaremap-paper-mc1.21.4-1.2.0.jar"
     jar.write_bytes(b"core")
-    meta = tmp_path / ".minenode" / "content.json"
+    meta = tmp_path / ".varden" / "content.json"
     meta.parent.mkdir()
     meta.write_text(json.dumps({"files": {jar.name: {"project_id": squaremap.PROJECT_ID,
                                                      "version_id": "v1", "version_number": "1.2.0"}}}))
@@ -245,7 +245,7 @@ def test_state_reports_update_and_public_urls(tmp_path, monkeypatch):
     inst = _paper(tmp_path)
     (tmp_path / "plugins" / "squaremap" / "web").mkdir(parents=True)
     (tmp_path / "plugins" / "squaremap" / "web" / "index.html").write_text("x")
-    meta = tmp_path / ".minenode" / "content.json"
+    meta = tmp_path / ".varden" / "content.json"
     meta.parent.mkdir()
     meta.write_text(json.dumps({"files": {"squaremap-paper-mc1.21.4-1.2.0.jar": {
         "project_id": squaremap.PROJECT_ID, "version_id": "old", "version_number": "1.2.0"}}},

@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# Build MineNodeRouter.jar against a Geyser standalone JAR.
+# Build VardenRouter.jar against a Geyser standalone JAR.
 # Usage: ./build.sh /path/to/geyser-standalone.jar [--test]
 set -eu
 
@@ -23,7 +23,7 @@ find "$ROOT/src" -name '*.java' -print > "$BUILD/sources.txt"
 javac --release 21 -encoding UTF-8 -Xlint:all -classpath "$GEYSER_JAR" -d "$CLASSES" @"$BUILD/sources.txt"
 cp "$ROOT/extension.yml" "$CLASSES/"
 
-OUT_JAR="$ROOT/MineNodeRouter.jar"
+OUT_JAR="$ROOT/VardenRouter.jar"
 jar --create --file "$OUT_JAR" -C "$CLASSES" .
 echo "Built $OUT_JAR"
 
@@ -32,5 +32,5 @@ if [ "$RUN_TESTS" -eq 1 ]; then
     mkdir -p "$TEST_CLASSES"
     find "$ROOT/test" -name '*.java' -print > "$BUILD/test-sources.txt"
     javac --release 21 -encoding UTF-8 -classpath "$GEYSER_JAR:$CLASSES" -d "$TEST_CLASSES" @"$BUILD/test-sources.txt"
-    java -classpath "$CLASSES:$TEST_CLASSES" pl.minenode.router.RouteTableTest
+    java -classpath "$CLASSES:$TEST_CLASSES" pl.varden.router.RouteTableTest
 fi

@@ -1,4 +1,4 @@
-"""MineNode – application entry point."""
+"""Varden – application entry point."""
 from __future__ import annotations
 
 import logging
@@ -23,7 +23,7 @@ from .proxy import MinecraftProxy  # noqa: E402
 from .voice import VoiceProxy  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-7s %(name)s: %(message)s")
-log = logging.getLogger("minenode")
+log = logging.getLogger("varden")
 
 
 @asynccontextmanager
@@ -63,7 +63,7 @@ async def security_middleware(request: Request, call_next):
     # CSRF protection: state-changing API calls must carry a custom header, which browsers
     # never attach to cross-site form posts and which CORS blocks for foreign origins.
     if request.url.path.startswith("/api/") and request.method not in ("GET", "HEAD", "OPTIONS"):
-        if request.headers.get("x-requested-with") != "minenode":
+        if request.headers.get("x-requested-with") not in ("varden", "minenode"):  # old name: a tab opened before the update
             return JSONResponse({"detail": "Brak nagłówka X-Requested-With"}, status_code=403)
     response = await call_next(request)
     response.headers.setdefault("X-Content-Type-Options", "nosniff")

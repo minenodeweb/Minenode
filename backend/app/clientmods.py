@@ -147,7 +147,7 @@ async def _modrinth_client_only(hashes: list[str]) -> set[str]:
 
 
 def _mark(server_dir: Path, file: str, reason: str) -> None:
-    meta_path = server_dir / ".minenode" / "content.json"
+    meta_path = server_dir / ".varden" / "content.json"
     try:
         meta = json.loads(meta_path.read_text())
     except (FileNotFoundError, json.JSONDecodeError):
@@ -247,7 +247,7 @@ MISSING_CLASS = re.compile(r"(NoClassDefFoundError|ClassNotFoundException)|requi
 
 def _record(server_dir: Path, jar: Path, version: dict, project: dict, sha1: str | None) -> None:
     import time
-    meta_path = server_dir / ".minenode" / "content.json"
+    meta_path = server_dir / ".varden" / "content.json"
     try:
         meta = json.loads(meta_path.read_text())
     except (FileNotFoundError, json.JSONDecodeError):
@@ -325,7 +325,7 @@ async def repair_dependencies(server_dir: Path, engine: str, mc: str, log: Log, 
             if not v:
                 continue  # not available for this loader / version – usually a wrong declaration on Modrinth
             f = next((x for x in v["files"] if x.get("primary")), v["files"][0])
-            tmp = server_dir / ".minenode" / "tmp" / Path(f["filename"]).name
+            tmp = server_dir / ".varden" / "tmp" / Path(f["filename"]).name
             tmp.parent.mkdir(parents=True, exist_ok=True)
             try:
                 await net.download(f["url"], tmp, sha1=f.get("hashes", {}).get("sha1"))
