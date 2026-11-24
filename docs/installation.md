@@ -133,7 +133,7 @@ On the first start Varden moves everything to the new names by itself:
 - `.minenodepack` files can still be imported;
 - you stay logged in (the old session cookie is accepted).
 
-The `zzabek/minenode` image name keeps receiving the same updates for now, so nothing breaks if you do not change it yet.
+New releases are published exclusively under `zzabek/varden:latest`; the old `zzabek/minenode` image is no longer updated.
 
 ## Deploying with Dockge / Portainer
 

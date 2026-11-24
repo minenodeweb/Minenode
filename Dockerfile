@@ -92,7 +92,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
       "$TAG" "$VERSION" "$PATCH_ID" "$PICOLIMBO_REPO" "$BIN_SHA" "$BUILT_AT" > /out/picolimbo-version.json
 
 # ---------------------------------------------------------------- runtime
-FROM python:3.12-slim-bookworm
+FROM python:3.14-slim-bookworm
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -140,7 +140,7 @@ LABEL org.opencontainers.image.title="Varden" \
       org.opencontainers.image.authors="Bernard Wieczorek, Piotr Janaszak" \
       org.opencontainers.image.vendor="Varden" \
       org.opencontainers.image.licenses="Apache-2.0" \
-      org.opencontainers.image.base.name="docker.io/library/python:3.12-slim-bookworm" \
+      org.opencontainers.image.base.name="docker.io/library/python:3.14-slim-bookworm" \
       org.opencontainers.image.version="${IMAGE_VERSION}" \
       org.opencontainers.image.revision="${IMAGE_REVISION}" \
       org.opencontainers.image.created="${IMAGE_CREATED}"

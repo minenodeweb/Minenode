@@ -13,7 +13,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License: Apache 2.0"></a>
   <a href="https://hub.docker.com/r/zzabek/varden"><img src="https://img.shields.io/docker/pulls/zzabek/varden?logo=docker&logoColor=white" alt="Docker pulls"></a>
   <a href="https://hub.docker.com/r/zzabek/varden"><img src="https://img.shields.io/docker/image-size/zzabek/varden/latest?logo=docker&logoColor=white&label=image" alt="Docker image size"></a>
-  <img src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white" alt="Python 3.12">
+  <img src="https://img.shields.io/badge/Python-3.14-3776AB?logo=python&logoColor=white" alt="Python 3.14">
   <img src="https://img.shields.io/badge/Vue-3-4FC08D?logo=vuedotjs&logoColor=white" alt="Vue 3">
   <img src="https://img.shields.io/badge/Rust-proxy-000000?logo=rust&logoColor=white" alt="Rust proxy">
 </p>
@@ -117,7 +117,12 @@ services:
       - varden-data:/data
     environment:
       TZ: Europe/Warsaw
+      PUID: "1000"
+      PGID: "1000"
+      VARDEN_SECURE_COOKIES: "false"
     stop_grace_period: 2m     # lets servers save their worlds on stop
+    ulimits:
+      nofile: { soft: 65535, hard: 65535 }
 
 volumes:
   varden-data:
@@ -138,7 +143,8 @@ Prefer a single command?
 ```bash
 docker run -d --name varden --restart unless-stopped \
   -p 8080:8080 -p 25565:25565 -p 24454:24454/udp -p 19132:19132/tcp -p 19132:19132/udp \
-  -v varden-data:/data --stop-timeout 120 \
+  -v varden-data:/data -e TZ=Europe/Warsaw \
+  --stop-timeout 120 --ulimit nofile=65535:65535 \
   zzabek/varden:latest
 ```
 

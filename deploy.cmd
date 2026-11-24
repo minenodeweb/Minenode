@@ -3,8 +3,6 @@ chcp 65001 >nul
 setlocal enabledelayedexpansion
 
 set "IMAGE_NAME=zzabek/varden:latest"
-:: Stara nazwa sprzed zmiany na Varden – dotychczasowe instalacje nadal ją pobierają
-set "LEGACY_IMAGE=zzabek/minenode:latest"
 
 echo ==^> Sprawdzanie stanu Docker Engine...
 
@@ -88,16 +86,12 @@ if %errorlevel% neq 0 (
 echo ==^> Wysyłanie obrazu na Docker Hub...
 docker push "%IMAGE_NAME%"
 
-if %errorlevel% equ 0 (
-    docker tag "%IMAGE_NAME%" "%LEGACY_IMAGE%"
-    docker push "%LEGACY_IMAGE%"
+if %errorlevel% neq 0 (
+    echo [BŁĄD] Błąd podczas wysyłania obrazu na Docker Hub. Upewnij się, że jesteś zalogowany przez docker login.
+    goto :END
 )
 
-if %errorlevel% equ 0 (
-    echo ==^> Sukces! Obraz %IMAGE_NAME% został pomyślnie wysłany.
-) else (
-    echo [BŁĄD] Błąd podczas wysyłania obrazu na Docker Hub. Upewnij się, że jesteś zalogowany (docker login).
-)
+echo ==^> Sukces! Obraz %IMAGE_NAME% został pomyślnie wysłany.
 
 :END
 echo.
