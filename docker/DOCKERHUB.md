@@ -5,7 +5,7 @@ Java and Bedrock players, mods and plugins from Modrinth and CurseForge, live we
 
 [![GitHub](https://img.shields.io/badge/GitHub-Varden--app%2FVarden-181717?logo=github&logoColor=white)](https://github.com/Varden-app/Varden)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](https://github.com/Varden-app/Varden/blob/main/LICENSE)
-[![Docker Pulls](https://img.shields.io/docker/pulls/zzabek/varden?logo=docker&logoColor=white)](https://hub.docker.com/r/zzabek/varden)
+[![Docker Pulls](https://img.shields.io/docker/pulls/zzabek/varden?logo=docker&logoColor=white&cacheSeconds=300)](https://hub.docker.com/r/zzabek/varden)
 [![Docker Image Size](https://img.shields.io/docker/image-size/zzabek/varden/latest?logo=docker&logoColor=white&label=image)](https://hub.docker.com/r/zzabek/varden)
 ![Python 3.14](https://img.shields.io/badge/Python-3.14-3776AB?logo=python&logoColor=white)
 ![Vue 3](https://img.shields.io/badge/Vue-3-4FC08D?logo=vuedotjs&logoColor=white)

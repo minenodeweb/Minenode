@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License: Apache 2.0"></a>
-  <a href="https://hub.docker.com/r/zzabek/varden"><img src="https://img.shields.io/docker/pulls/zzabek/varden?logo=docker&logoColor=white" alt="Docker pulls"></a>
+  <a href="https://hub.docker.com/r/zzabek/varden"><img src="https://img.shields.io/docker/pulls/zzabek/varden?logo=docker&logoColor=white&cacheSeconds=300" alt="Docker pulls"></a>
   <a href="https://hub.docker.com/r/zzabek/varden"><img src="https://img.shields.io/docker/image-size/zzabek/varden/latest?logo=docker&logoColor=white&label=image" alt="Docker image size"></a>
   <img src="https://img.shields.io/badge/Python-3.14-3776AB?logo=python&logoColor=white" alt="Python 3.14">
   <img src="https://img.shields.io/badge/Vue-3-4FC08D?logo=vuedotjs&logoColor=white" alt="Vue 3">
