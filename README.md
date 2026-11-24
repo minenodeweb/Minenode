@@ -191,7 +191,7 @@ None of the game servers, plugins or mods are stored in this repository: MineNod
 
 MineNode is made by **Bernard Wieczorek** and **Piotr Janaszak**.
 
-Found a bug or have an idea? [Open an issue](https://github.com/BernardGFB1/Minenode/issues).
+Found a bug or have an idea? [Open an issue](https://github.com/minenodeweb/Minenode/issues).
 
 ## License
 

@@ -125,7 +125,7 @@ Paste the compose file from above into Dockge or a Portainer stack. To build the
 services:
   minenode:
     build:
-      context: https://github.com/BernardGFB1/Minenode.git#main
+      context: https://github.com/minenodeweb/Minenode.git#main
     image: minenode:latest
     # … the rest as in the compose file above
 ```
