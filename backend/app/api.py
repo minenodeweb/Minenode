@@ -26,7 +26,7 @@ from starlette.websockets import WebSocketDisconnect
 from . import storage as storage_mod
 from . import bedrock_compat, datapacks as dpacks, packs, worldgen
 from . import auth, auth_sessions, content, files, java as javamod, modpacks, players as pl, providers, resourcepacks as rpacks, voice
-from . import chunky, itemicons, lod, playerstats, squaremap, updates, webmap
+from . import chunky, itemicons, lod, playerstats, skins, squaremap, updates, webmap
 from .models import ChunkySettings
 from .backups import safe_extract
 from .config import BEDROCK_PORT, DATA_DIR, PANEL_PORT, PROXY_PORT, SECURE_COOKIES, TMP_DIR, VERSION, CURSEFORGE_API_KEY_ENV
@@ -2548,6 +2548,39 @@ async def webmap_render(sid: str, body: WebMapRenderBody, _: str = Depends(auth.
         inst.map_render.start(body.mode)
     await asyncio.sleep(0.3)  # let the map answer the first command
     return await webmap.state(inst)
+
+
+# ====================================================================== SkinsRestorer (skins on offline servers)
+
+@router.get("/servers/{sid}/skins")
+async def skins_get(sid: str, refresh: bool = False, _: str = Depends(auth.require_user)):
+    return await skins.state(inst_or_404(sid), refresh=refresh)
+
+
+class SkinsBody(BaseModel):
+    enabled: bool
+
+
+@router.post("/servers/{sid}/skins")
+@run_errors
+async def skins_set(sid: str, body: SkinsBody, _: str = Depends(auth.require_user)):
+    inst = inst_or_404(sid)
+    if body.enabled and not skins.supported(inst):
+        raise HTTPException(400, skins.unsupported_reason(inst) or "Ten silnik nie jest obsługiwany")
+    before = inst.cfg.skins_enabled
+    inst.cfg.skins_enabled = body.enabled
+    try:
+        result = await skins.prepare(inst, refresh=body.enabled and not before)
+    except Exception:
+        inst.cfg.skins_enabled = before
+        raise
+    manager.save_server(inst.cfg)
+    if body.enabled != before:
+        inst.panel_log(f"SkinsRestorer {(result or {}).get('version') or ''} włączony – gracze dostaną skiny kont Java."
+                       if body.enabled else "SkinsRestorer wyłączony.")
+    changed = body.enabled != before or bool((result or {}).get("updated"))
+    return {**await skins.state(inst), "restart_required": bool(changed and inst.running),
+            "installed_files": (result or {}).get("installed_files", [])}
 
 
 # ====================================================================== LOD for Distant Horizons / Voxy

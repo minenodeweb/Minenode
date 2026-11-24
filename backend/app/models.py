@@ -134,6 +134,7 @@ class ServerConfig(BaseModel):
     webmap: WebMapSettings = WebMapSettings()  # live web map served by the panel under /map/<id>/
     public_page: PublicPageSettings = PublicPageSettings()  # visibility of the public stats page
     lod: LodSettings = LodSettings()
+    skins_enabled: bool = False  # SkinsRestorer: Java account skins for offline-mode players
     chunky: ChunkySettings = ChunkySettings()
     backup: BackupSchedule = BackupSchedule()
     modpack: Optional[ModpackInfo] = None

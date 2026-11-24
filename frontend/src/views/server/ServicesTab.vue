@@ -26,6 +26,8 @@
 
     <LodCard :server-id="id" />
 
+    <SkinsCard :server-id="id" />
+
     <ChunkyCard :server-id="id" />
   </div>
 </template>
@@ -37,6 +39,7 @@ import VoiceChatCard from '../../components/VoiceChatCard.vue'
 import BedrockCard from '../../components/BedrockCard.vue'
 import WebMapCard from '../../components/WebMapCard.vue'
 import LodCard from '../../components/LodCard.vue'
+import SkinsCard from '../../components/SkinsCard.vue'
 import ChunkyCard from '../../components/ChunkyCard.vue'
 import { api } from '../../api'
 import { toast, toastError } from '../../store'

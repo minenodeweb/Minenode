@@ -1347,6 +1347,16 @@ const strings = {
   'Panel jest gotowy – utwórz pierwszy serwer': 'The panel is ready – create your first server',
   'Panel jest już skonfigurowany – zmiany wprowadzisz w Ustawieniach': 'The panel is already set up – make changes in Settings',
   'Konto': 'Account',
+  // SkinsRestorer
+  'Skiny graczy (SkinsRestorer)': 'Player skins (SkinsRestorer)',
+  'Skiny kont Minecraft Java': 'Minecraft Java account skins',
+  'Na serwerze bez weryfikacji kont (offline-mode) wszyscy wyglądają jak Steve lub Alex. SkinsRestorer daje każdemu graczowi skina konta Minecraft Java o tej samej nazwie. Gracz bez takiego konta wybierze skina sam: /skin set <nazwa gracza> albo /skin url <link do skina>.': 'On a server without account checks (offline mode) everybody looks like Steve or Alex. SkinsRestorer gives each player the skin of the Minecraft Java account with the same name. Players without such an account pick a skin themselves: /skin set <player name> or /skin url <link to a skin>.',
+  'Ten serwer działa w trybie online-mode – gracze i tak mają swoje skiny. SkinsRestorer przyda się tu tylko do zmiany skina komendą /skin.': 'This server runs in online mode – players already have their skins. SkinsRestorer is only useful here for changing skins with /skin.',
+  'Gracze Bedrock (Geyser) dostają domyślnego skina albo skina konta Java o tej samej nazwie – nie swojego skina z Bedrocka. Mogą ustawić skina komendą /skin.': 'Bedrock players (Geyser) get a default skin or the skin of the Java account with the same name – not their own Bedrock skin. They can set one with /skin.',
+  'SkinsRestorer włączony': 'SkinsRestorer enabled',
+  'SkinsRestorer wyłączony': 'SkinsRestorer disabled',
+  'Wymaga silnika z pluginami lub modami (Paper, Purpur, Fabric, Quilt, NeoForge).': 'Needs an engine with plugins or mods (Paper, Purpur, Fabric, Quilt, NeoForge).',
+  'SkinsRestorer nie ma wersji dla Forge – użyj NeoForge, Fabric albo Paper.': 'SkinsRestorer has no Forge version – use NeoForge, Fabric or Paper.',
   // Updates tab
   'Aktualizuj wszystkie': 'Update all',
   'Aktualizacje': 'Updates',
@@ -1772,6 +1782,10 @@ const patterns = [
   ['Brak wersji dla Minecrafta {a} w Modrinth.', 'No version for Minecraft {a} on Modrinth.'],
   ['Zaktualizowano {a}: {b} → {c}', 'Updated {a}: {b} → {c}'],
   ['Aktualizacja {a} nieudana: {b}', 'Updating {a} failed: {b}'],
+  ['SkinsRestorer {a} włączony – gracze dostaną skiny kont Java.', 'SkinsRestorer {a} enabled – players get their Java account skins.'],
+  ['SkinsRestorer wyłączony.', 'SkinsRestorer disabled.'],
+  ['SkinsRestorer zaktualizowany do {a}.', 'SkinsRestorer updated to {a}.'],
+  ['SkinsRestorer: nie udało się przygotować – {a}', 'SkinsRestorer: preparation failed – {a}'],
 ]
 
 export default { strings, patterns }

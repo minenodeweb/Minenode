@@ -780,6 +780,10 @@ class ServerInstance:
                 if getattr(self.cfg.lod, key) and not lod.supported(self, key):
                     setattr(self.cfg.lod, key, False)
                     log(f"{lod.jars(self)[key].title} wyłączony – nowy silnik go nie obsługuje.")
+            from . import skins
+            if self.cfg.skins_enabled and not skins.supported(self):
+                self.cfg.skins_enabled = False
+                log("SkinsRestorer wyłączony – nowy silnik go nie obsługuje.")
 
             if plan:
                 self.set_job("Instalacja modpacka", "Pobieranie modów", 0.6)
@@ -968,6 +972,14 @@ class ServerInstance:
                             self.panel_log(f"{lod.jars(self)[key].title} zaktualizowany do {r.get('version')}.")
                 except Exception as exc:  # noqa: BLE001 – LODs must never prevent the server from starting
                     self.panel_log(f"LOD: nie udało się przygotować – {exc}")
+            from . import skins
+            if self.cfg.skins_enabled or skins.SKINSRESTORER.jars(self):
+                try:
+                    r = await skins.prepare(self)
+                    if r and r.get("updated"):
+                        self.panel_log(f"SkinsRestorer zaktualizowany do {r.get('version')}.")
+                except Exception as exc:  # noqa: BLE001 – skins must never prevent the server from starting
+                    self.panel_log(f"SkinsRestorer: nie udało się przygotować – {exc}")
             from . import chunky
             if chunky.engine_supported(self) and chunky.installed_info(self):
                 try:
