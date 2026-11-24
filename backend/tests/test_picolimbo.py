@@ -135,3 +135,38 @@ def test_dockerfile_builds_picolimbo_latest_without_runtime_compiler():
     assert "gcc" not in runtime_section
     assert "libc6-dev" not in runtime_section
     assert "patch" not in runtime_section
+
+
+def test_dockerfile_oci_metadata_and_notices():
+    root = Path(__file__).resolve().parents[2]
+    dockerfile = (root / "Dockerfile").read_text(encoding="utf-8")
+    deploy_cmd = (root / "deploy.cmd").read_text(encoding="utf-8")
+
+    runtime_section = dockerfile.split("FROM python:3.12-slim-bookworm", 1)[1]
+    assert "COPY LICENSE NOTICE ./" in runtime_section
+
+    pip_pos = runtime_section.index("RUN pip install -r requirements.txt")
+    for arg in ("IMAGE_VERSION", "IMAGE_REVISION", "IMAGE_CREATED"):
+        decl = f"ARG {arg}="
+        assert decl in runtime_section
+        assert runtime_section.index(decl) > pip_pos
+
+    expected_labels = [
+        'org.opencontainers.image.title="Varden"',
+        'org.opencontainers.image.description="Self-hosted Minecraft server management panel with built-in reverse proxy, Bedrock gateway, live maps, and backups"',
+        'org.opencontainers.image.url="https://github.com/Varden-app/Varden"',
+        'org.opencontainers.image.source="https://github.com/Varden-app/Varden"',
+        'org.opencontainers.image.documentation="https://github.com/Varden-app/Varden/tree/main/docs"',
+        'org.opencontainers.image.authors="Bernard Wieczorek, Piotr Janaszak"',
+        'org.opencontainers.image.vendor="Varden"',
+        'org.opencontainers.image.licenses="Apache-2.0"',
+        'org.opencontainers.image.base.name="docker.io/library/python:3.12-slim-bookworm"',
+        'org.opencontainers.image.version="${IMAGE_VERSION}"',
+        'org.opencontainers.image.revision="${IMAGE_REVISION}"',
+        'org.opencontainers.image.created="${IMAGE_CREATED}"',
+    ]
+    for label in expected_labels:
+        assert label in runtime_section
+
+    for arg in ("IMAGE_VERSION", "IMAGE_REVISION", "IMAGE_CREATED"):
+        assert f'--build-arg "{arg}=!{arg}!"' in deploy_cmd

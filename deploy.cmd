@@ -60,8 +60,25 @@ if defined PICOLIMBO_URL (
         set "PICOLIMBO_TAG=!CANDIDATE!"
     )
 )
-echo ==^> Budowanie obrazu: %IMAGE_NAME% (PicoLimbo: !PICOLIMBO_TAG!)...
-docker build --build-arg "PICOLIMBO_TAG=!PICOLIMBO_TAG!" -t "%IMAGE_NAME%" .
+set "IMAGE_VERSION=1.0.0"
+for /f "usebackq delims=" %%I in (`powershell -NoProfile -Command "if ((Get-Content -Raw 'backend\app\config.py') -match '(?m)^VERSION\s*=\s*\x22([^\x22]+)\x22') { $Matches[1] }" 2^>nul`) do (
+    if not "%%I"=="" set "IMAGE_VERSION=%%I"
+)
+set "IMAGE_REVISION="
+for /f "usebackq delims=" %%I in (`git rev-parse HEAD 2^>nul`) do (
+    set "IMAGE_REVISION=%%I"
+)
+set "IMAGE_CREATED="
+for /f "usebackq delims=" %%I in (`powershell -NoProfile -Command "[DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ')" 2^>nul`) do (
+    set "IMAGE_CREATED=%%I"
+)
+echo ==^> Budowanie obrazu: %IMAGE_NAME% (v!IMAGE_VERSION!, PicoLimbo: !PICOLIMBO_TAG!)...
+docker build ^
+  --build-arg "PICOLIMBO_TAG=!PICOLIMBO_TAG!" ^
+  --build-arg "IMAGE_VERSION=!IMAGE_VERSION!" ^
+  --build-arg "IMAGE_REVISION=!IMAGE_REVISION!" ^
+  --build-arg "IMAGE_CREATED=!IMAGE_CREATED!" ^
+  -t "%IMAGE_NAME%" .
 
 if %errorlevel% neq 0 (
     echo [BŁĄD] Wystąpił błąd podczas budowania obrazu.
