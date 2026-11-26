@@ -3,59 +3,66 @@
   --font: 'Inter Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --mono: 'JetBrains Mono Variable', ui-monospace, 'SF Mono', Menlo, monospace;
 
-  --bg: #0f1311;
-  --bg-sunken: #0b0e0c;
-  --surface: #151a17;
-  --surface-2: #1b211d;
-  --surface-3: #232a25;
-  --border: #262e29;
-  --border-strong: #34403a;
-  --text: #e4e9e5;
-  --text-2: #a9b3ac;
-  --muted: #7b867f;
-  --accent: #86c062;
-  --accent-strong: #9ad073;
-  --accent-ink: #0d1a08;
-  --accent-soft: rgba(134, 192, 98, 0.12);
+  --bg: #090b11;
+  --bg-sunken: #06070c;
+  --surface: #11141d;
+  --surface-2: #161a25;
+  --surface-3: #1d2230;
+  --border: #1e2331;
+  --border-strong: #2b3245;
+  --text: #e3e6f0;
+  --text-2: #a6acbf;
+  --muted: #747b91;
+  --accent: #5b6fd6;
+  --accent-strong: #7083e4;
+  --accent-ink: #ffffff;
+  --accent-soft: rgba(91, 111, 214, 0.14);
+  --success: #5cc08a;
+  --success-soft: rgba(92, 192, 138, 0.12);
   --warn: #e3a849;
   --warn-soft: rgba(227, 168, 73, 0.12);
   --danger: #e5675a;
   --danger-soft: rgba(229, 103, 90, 0.12);
-  --info: #64a8d8;
-  --info-soft: rgba(100, 168, 216, 0.12);
-  --console-bg: #0a0d0b;
+  --info: #5aa9d6;
+  --info-soft: rgba(90, 169, 214, 0.12);
+  --console-bg: #07080d;
+  --chart-2: #3fbac4;
 
   --radius-sm: 6px;
   --radius: 10px;
   --radius-lg: 14px;
   --shadow: 0 1px 0 rgba(255, 255, 255, 0.02) inset, 0 8px 24px rgba(0, 0, 0, 0.25);
-  --ring: 0 0 0 3px rgba(134, 192, 98, 0.28);
+  --ring: 0 0 0 3px rgba(91, 111, 214, 0.35);
   --sidebar-w: 248px;
 }
 
 :root[data-theme='light'] {
-  --bg: #f3f4f1;
-  --bg-sunken: #e9ebe6;
+  --bg: #f3f4f8;
+  --bg-sunken: #e8eaf1;
   --surface: #ffffff;
-  --surface-2: #f7f8f5;
-  --surface-3: #eef0eb;
-  --border: #e1e4dd;
-  --border-strong: #cdd2c8;
-  --text: #19201b;
-  --text-2: #46504a;
-  --muted: #6c766f;
-  --accent: #3f8a2a;
-  --accent-strong: #357823;
+  --surface-2: #f7f8fb;
+  --surface-3: #eef0f6;
+  --border: #e0e3ec;
+  --border-strong: #cbd0dd;
+  --text: #171a26;
+  --text-2: #454b5e;
+  --muted: #6b7186;
+  --accent: #4a5cc7;
+  --accent-strong: #3e4fb4;
   --accent-ink: #ffffff;
-  --accent-soft: rgba(63, 138, 42, 0.1);
+  --accent-soft: rgba(74, 92, 199, 0.1);
+  --success: #2e8a57;
+  --success-soft: rgba(46, 138, 87, 0.1);
   --warn: #b7791f;
   --warn-soft: rgba(183, 121, 31, 0.1);
   --danger: #c4473a;
   --danger-soft: rgba(196, 71, 58, 0.09);
   --info: #2f78b0;
   --info-soft: rgba(47, 120, 176, 0.09);
-  --console-bg: #121614;
-  --shadow: 0 1px 2px rgba(20, 30, 20, 0.05), 0 6px 20px rgba(20, 30, 20, 0.06);
+  --console-bg: #10121a;
+  --chart-2: #1d8b94;
+  --ring: 0 0 0 3px rgba(74, 92, 199, 0.25);
+  --shadow: 0 1px 2px rgba(20, 24, 40, 0.05), 0 6px 20px rgba(20, 24, 40, 0.06);
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -78,7 +85,7 @@ h2 { font-size: 17px; }
 h3 { font-size: 15px; }
 p { margin: 0; }
 code, .mono { font-family: var(--mono); font-size: 0.92em; }
-::selection { background: rgba(134, 192, 98, 0.3); }
+::selection { background: rgba(91, 111, 214, 0.35); }
 :focus-visible { outline: none; box-shadow: var(--ring); }
 
 /* scrollbars */
@@ -175,7 +182,7 @@ input[type='checkbox'] { accent-color: var(--accent); width: 16px; height: 16px;
   display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px; border-radius: 999px;
   font-size: 12px; font-weight: 550; background: var(--surface-3); color: var(--text-2); white-space: nowrap;
 }
-.badge.green { background: var(--accent-soft); color: var(--accent); }
+.badge.green { background: var(--success-soft); color: var(--success); }
 .badge.amber { background: var(--warn-soft); color: var(--warn); }
 .badge.red { background: var(--danger-soft); color: var(--danger); }
 .badge.blue { background: var(--info-soft); color: var(--info); }
@@ -209,8 +216,8 @@ input[type='checkbox'] { accent-color: var(--accent); width: 16px; height: 16px;
 .callout.warn svg { color: var(--warn); }
 .callout.info { background: var(--info-soft); border-color: color-mix(in srgb, var(--info) 30%, transparent); }
 .callout.info svg { color: var(--info); }
-.callout.green { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 30%, transparent); }
-.callout.green svg { color: var(--accent); }
+.callout.green { background: var(--success-soft); border-color: color-mix(in srgb, var(--success) 30%, transparent); }
+.callout.green svg { color: var(--success); }
 .divider { height: 1px; background: var(--border); margin: 4px 0; }
 .kbd { font-family: var(--mono); font-size: 11px; padding: 1px 5px; border: 1px solid var(--border-strong); border-radius: 4px; color: var(--muted); }
 .page { padding: 28px 32px 48px; max-width: 1320px; margin: 0 auto; }

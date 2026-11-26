@@ -35,7 +35,7 @@
       </div>
       <div class="card">
         <div class="card-head"><h3>{{ $t('Zużycie pamięci') }}</h3><span class="tiny muted">{{ $t('limit sterty {v}', { v: formatMB(s.max_ram_mb) }) }}</span></div>
-        <div class="card-body"><AreaChart :points="memPts" :window="windowSec" :max="s.max_ram_mb * 1048576 * 1.2" color="var(--info)" :format="(v) => formatBytes(v)" /></div>
+        <div class="card-body"><AreaChart :points="memPts" :window="windowSec" :max="s.max_ram_mb * 1048576 * 1.2" color="var(--chart-2)" :format="(v) => formatBytes(v)" /></div>
       </div>
     </div>
 
@@ -109,14 +109,14 @@ onUnmounted(() => clearInterval(t))
 .tl svg { width: 15px; height: 15px; color: var(--muted); }
 .tv { font-size: 24px; font-weight: 650; letter-spacing: -0.02em; }
 .tv small { font-size: 13px; color: var(--muted); font-weight: 500; }
-.tail { background: var(--console-bg); color: #cfd6d0; font-size: 12px; padding: 12px 16px; border-radius: 0 0 var(--radius-lg) var(--radius-lg); min-height: 240px; line-height: 1.6; overflow: hidden; }
+.tail { background: var(--console-bg); color: #cfd3de; font-size: 12px; padding: 12px 16px; border-radius: 0 0 var(--radius-lg) var(--radius-lg); min-height: 240px; line-height: 1.6; overflow: hidden; }
 .tl-line { white-space: pre-wrap; word-break: break-word; }
 .tl-line.panel { color: #8fc7ec; }
 .tl-line.cmd { color: #a6e07f; }
 .player { display: inline-flex; align-items: center; gap: 7px; padding: 4px 10px 4px 4px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); font-size: 13px; }
 .player img { width: 22px; height: 22px; border-radius: 50%; image-rendering: pixelated; }
 .pms { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
-.pms.green { color: var(--accent); }
+.pms.green { color: var(--success); }
 .pms.amber { color: var(--warn); }
 .pms.red { color: var(--danger); }
 .info { display: grid; grid-template-columns: auto 1fr; gap: 9px 16px; margin: 0; padding: 16px 20px; font-size: 13px; }

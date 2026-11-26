@@ -167,7 +167,7 @@ const pardon = (name) => act(() => api.del(`/servers/${id}/players/bans/${name}`
 .pname b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pms { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .pms svg { width: 12px; height: 12px; }
-.pms.green { color: var(--accent); }
+.pms.green { color: var(--success); }
 .pms.amber { color: var(--warn); }
 .pms.red { color: var(--danger); }
 .addrow { display: flex; gap: 8px; padding: 12px 18px 4px; }

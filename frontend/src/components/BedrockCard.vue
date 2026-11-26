@@ -164,7 +164,7 @@ async function toggle(enabled) {
 .info { display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; margin: 0; font-size: 13px; }
 .info dt { color: var(--muted); }
 .info dd { margin: 0; }
-.ok { color: var(--accent); }
+.ok { color: var(--success); }
 .err { color: var(--danger); }
 .pending { display: inline-flex; align-items: center; gap: 6px; color: var(--warn); }
 .logbox { margin: 0; padding: 10px 12px; border-radius: var(--radius); background: var(--surface-2); border: 1px solid var(--border);

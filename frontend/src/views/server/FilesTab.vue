@@ -231,6 +231,6 @@ onUnmounted(() => clearTimeout(dragWatchdog))
 .acts { opacity: 0.35; transition: opacity 0.1s; }
 tr:hover .acts { opacity: 1; }
 .dropmask { position: absolute; inset: 0; background: color-mix(in srgb, var(--accent) 12%, var(--surface)); display: flex; align-items: center; justify-content: center; gap: 10px; color: var(--accent); font-weight: 600; pointer-events: none; }
-.editor { width: 100%; height: min(68vh, 720px); resize: none; background: var(--console-bg); color: #dfe5e0; border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; font-family: var(--mono); font-size: 12.5px; line-height: 1.6; tab-size: 2; outline: none; }
+.editor { width: 100%; height: min(68vh, 720px); resize: none; background: var(--console-bg); color: #dfe2ea; border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; font-family: var(--mono); font-size: 12.5px; line-height: 1.6; tab-size: 2; outline: none; }
 .editor:focus { border-color: var(--accent); }
 </style>

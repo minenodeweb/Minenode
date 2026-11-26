@@ -52,10 +52,10 @@ defineEmits(['power', 'copy'])
 </script>
 <style scoped>
 .server { padding: 18px; display: flex; flex-direction: column; gap: 14px; cursor: pointer; transition: border-color 0.2s, box-shadow 0.2s; }
-.server.tone-on { border-color: var(--accent); }
+.server.tone-on { border-color: color-mix(in srgb, var(--success) 55%, var(--border)); }
 .server.tone-off { border-color: color-mix(in srgb, var(--danger) 40%, var(--border)); }
 .server.tone-busy { border-color: var(--warn); }
-.server.tone-on:hover { box-shadow: var(--shadow), 0 0 0 1px var(--accent) inset; }
+.server.tone-on:hover { box-shadow: var(--shadow), 0 0 0 1px color-mix(in srgb, var(--success) 55%, var(--border)) inset; }
 .server.tone-off:hover { border-color: color-mix(in srgb, var(--danger) 65%, var(--border)); }
 .server.tone-busy:hover { box-shadow: var(--shadow), 0 0 0 1px var(--warn) inset; }
 .server:hover { border-color: var(--border-strong); }

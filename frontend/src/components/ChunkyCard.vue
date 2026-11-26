@@ -244,7 +244,7 @@ async function doRestart() {
 .hi { width: 16px; height: 16px; color: var(--muted); flex: none; }
 .task { padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2); }
 .task.running { border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
-.task.finished .ti { color: var(--accent); }
+.task.finished .ti { color: var(--success); }
 .ti { width: 18px; height: 18px; color: var(--muted); flex: none; }
 .task.running .ti { color: var(--accent); animation: spin 1.6s linear infinite; }
 .pct { font-size: 20px; font-weight: 650; letter-spacing: -0.02em; }

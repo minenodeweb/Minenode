@@ -92,8 +92,8 @@ export function mcToHtml(text) {
 }
 
 // ---------------------------------------------------------------- ANSI → HTML (console)
-const ANSI_16 = ['#3b3f3c', '#e5675a', '#86c062', '#e3a849', '#64a8d8', '#c678dd', '#56b6c2', '#c9cfca',
-  '#6b736d', '#ff8577', '#a6e07f', '#ffd27a', '#8cc8f2', '#e09bf0', '#7fdbe6', '#ffffff']
+const ANSI_16 = ['#3b3f4c', '#e5675a', '#86c062', '#e3a849', '#64a8d8', '#c678dd', '#56b6c2', '#c9cdd8',
+  '#6b7183', '#ff8577', '#a6e07f', '#ffd27a', '#8cc8f2', '#e09bf0', '#7fdbe6', '#ffffff']
 
 function xterm256(n) {
   if (n < 16) return ANSI_16[n]

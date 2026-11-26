@@ -102,24 +102,24 @@ function hist(d) {
 defineExpose({ focus: () => input.value?.focus() })
 </script>
 <style scoped>
-.console { position: relative; display: flex; flex-direction: column; background: var(--console-bg); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; height: 520px; color: #d5dbd6; }
+.console { position: relative; display: flex; flex-direction: column; background: var(--console-bg); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; height: 520px; color: #d5d9e3; }
 .console.fill { height: calc(100vh - 250px); min-height: 380px; }
 .bar { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-bottom: 1px solid rgba(255, 255, 255, 0.06); background: rgba(255, 255, 255, 0.02); }
 .bar .btn { background: transparent; border-color: rgba(255, 255, 255, 0.1); color: #a9b3ac; }
-.bar .btn.active { color: var(--accent); background: rgba(134, 192, 98, 0.1); }
+.bar .btn.active { color: var(--accent); background: var(--accent-soft); }
 .search { display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 9px; border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.1); }
 .search svg { width: 14px; height: 14px; color: #7b867f; }
-.search input { background: none; border: 0; outline: none; color: #d5dbd6; font: inherit; font-size: 12.5px; width: 140px; }
+.search input { background: none; border: 0; outline: none; color: #d5d9e3; font: inherit; font-size: 12.5px; width: 140px; }
 .out { flex: 1; overflow: auto; padding: 8px 0; font-family: var(--mono); font-size: 12.5px; line-height: 1.55; }
 .ln { display: flex; gap: 12px; padding: 0 14px; white-space: pre; }
 .out.wrap .ln { white-space: pre-wrap; word-break: break-word; }
 .ln:hover { background: rgba(255, 255, 255, 0.03); }
-.ts { color: #56605a; flex: none; user-select: none; }
+.ts { color: #565d70; flex: none; user-select: none; }
 .ln.warn .tx { color: #e3b866; }
 .ln.error .tx { color: #ef8478; }
 .ln.panel .tx { color: #8fc7ec; }
 .ln.cmd .tx { color: #a6e07f; }
-.ln.cmd .tx::before { content: '> '; color: #56605a; }
+.ln.cmd .tx::before { content: '> '; color: #565d70; }
 .jump { position: absolute; right: 18px; bottom: 60px; background: var(--surface-2); }
 .input-row { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-top: 1px solid rgba(255, 255, 255, 0.06); }
 .prompt { width: 16px; height: 16px; color: var(--accent); flex: none; }

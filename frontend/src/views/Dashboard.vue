@@ -14,7 +14,7 @@
           <div class="stat-label"><component :is="m.icon" /> {{ $t(m.label) }}</div>
           <div class="stat-value num">{{ m.value }}<small v-if="m.unit">{{ $t(m.unit) }}</small></div>
           <Meter v-if="m.meter != null" :value="m.meter" />
-          <div v-else class="row tiny" :style="{ color: m.ok ? 'var(--muted)' : 'var(--danger)' }"><span class="dot" :style="{ background: m.ok ? 'var(--accent)' : 'var(--danger)' }" />{{ $tm(m.status) }}</div>
+          <div v-else class="row tiny" :style="{ color: m.ok ? 'var(--muted)' : 'var(--danger)' }"><span class="dot" :style="{ background: m.ok ? 'var(--success)' : 'var(--danger)' }" />{{ $tm(m.status) }}</div>
           <div class="tiny muted">{{ $tm(m.hint) }}</div>
         </div>
       </div>
@@ -185,7 +185,7 @@ async function importPack(event) {
 .servers-section > * { max-width: 1320px; width: 100%; margin-left: auto; margin-right: auto; }
 .rows { display: flex; flex-direction: column; padding: 6px; }
 .srow { display: flex; align-items: center; gap: 14px; padding: 9px 12px; border-radius: var(--radius-sm); cursor: pointer; border-left: 3px solid transparent; }
-.srow.tone-on { border-left-color: var(--accent); }
+.srow.tone-on { border-left-color: var(--success); }
 .srow.tone-off { border-left-color: color-mix(in srgb, var(--danger) 45%, var(--border)); }
 .srow.tone-busy { border-left-color: var(--warn); }
 .srow:hover { background: var(--surface-2); }

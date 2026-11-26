@@ -220,5 +220,5 @@ async function remove(d) {
 @media (max-width: 640px) { .types { grid-template-columns: 1fr; } }
 .type { display: flex; gap: 10px; align-items: flex-start; text-align: left; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2); color: var(--text); font: inherit; cursor: pointer; }
 .type.active { border-color: var(--accent); background: var(--accent-soft); }
-.snippet { margin: 8px 0 0; padding: 8px 10px; background: var(--console-bg); color: #cfd6d0; border-radius: 6px; font-family: var(--mono); font-size: 12px; }
+.snippet { margin: 8px 0 0; padding: 8px 10px; background: var(--console-bg); color: #cfd3de; border-radius: 6px; font-family: var(--mono); font-size: 12px; }
 </style>

@@ -439,14 +439,14 @@ async function removeUser(u) {
 .kick-title { color: #aaa; margin-bottom: 10px; }
 .kick-msg { white-space: pre-wrap; }
 .card-head .badge .dot { background: currentColor; }
-.geyser-log { height: 240px; overflow: auto; padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--console-bg); color: #cfd6d0; font-size: 12px; line-height: 1.55; }
+.geyser-log { height: 240px; overflow: auto; padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--console-bg); color: #cfd3de; font-size: 12px; line-height: 1.55; }
 .geyser-log .gl { display: flex; gap: 10px; white-space: pre-wrap; word-break: break-word; }
-.geyser-log .ts { flex: none; color: #56605a; user-select: none; }
+.geyser-log .ts { flex: none; color: #565d70; user-select: none; }
 .geyser-log .gl.warn .tx { color: #e3b866; }
 .geyser-log .gl.error .tx { color: #ef8478; }
 .geyser-log .empty { color: var(--muted); padding: 4px 0; }
 .cmd { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 10px; border-radius: var(--radius-sm); background: var(--console-bg); border: 1px solid var(--border); min-width: 180px; }
-.cmd input { flex: 1; min-width: 0; background: none; border: 0; outline: none; color: #cfd6d0; font-size: 12.5px; }
+.cmd input { flex: 1; min-width: 0; background: none; border: 0; outline: none; color: #cfd3de; font-size: 12.5px; }
 .channel { padding-top: 12px; border-top: 1px solid var(--border); }
 .channel .pr { width: 90px; height: 30px; }
 .seg { display: inline-flex; padding: 3px; border-radius: 9px; background: var(--surface-2); border: 1px solid var(--border); }

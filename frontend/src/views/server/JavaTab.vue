@@ -166,7 +166,7 @@ async function copyCmd() { if (await copyText(info.value.command.join(' '))) toa
 .jopt.active, .preset.active { border-color: var(--accent); background: var(--accent-soft); }
 .jopt.warn.active { border-color: var(--danger); background: var(--danger-soft); }
 .jopt > div { flex: 1; }
-.cmd { margin: 0; padding: 14px 18px; background: var(--console-bg); color: #cfd6d0; font-family: var(--mono); font-size: 12px; line-height: 1.7; white-space: pre-wrap; word-break: break-all; max-height: 340px; overflow: auto; }
-.c-bin { color: #8fc7ec; } .c-mem { color: #a6e07f; font-weight: 600; } .c-xx { color: #c9cfca; } .c-d { color: #e3b866; } .c-jar { color: #e09bf0; }
+.cmd { margin: 0; padding: 14px 18px; background: var(--console-bg); color: #cfd3de; font-family: var(--mono); font-size: 12px; line-height: 1.7; white-space: pre-wrap; word-break: break-all; max-height: 340px; overflow: auto; }
+.c-bin { color: #8fc7ec; } .c-mem { color: #a6e07f; font-weight: 600; } .c-xx { color: #c9cdd8; } .c-d { color: #e3b866; } .c-jar { color: #e09bf0; }
 .savebar { position: sticky; bottom: 16px; display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-color: var(--accent); z-index: 5; }
 </style>

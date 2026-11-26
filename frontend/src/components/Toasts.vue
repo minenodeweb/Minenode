@@ -19,7 +19,7 @@ import { toasts, dismissToast } from '../store'
 .toast { display: flex; gap: 10px; align-items: flex-start; padding: 11px 14px; border-radius: var(--radius); background: var(--surface-2);
   border: 1px solid var(--border-strong); box-shadow: var(--shadow); cursor: pointer; font-size: 13.5px; }
 .toast svg { width: 18px; height: 18px; flex: none; margin-top: 1px; color: var(--info); }
-.toast.success svg { color: var(--accent); }
+.toast.success svg { color: var(--success); }
 .toast.error { border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); }
 .toast.error svg { color: var(--danger); }
 </style>

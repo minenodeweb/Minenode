@@ -102,7 +102,7 @@ async function logout() {
 .server-link { display: flex; align-items: center; gap: 9px; padding: 6px 10px; border-radius: var(--radius-sm); color: var(--text-2); font-size: 13px; }
 .server-link:hover { background: var(--surface-3); color: var(--text); text-decoration: none; }
 .server-link.active { background: var(--surface-3); color: var(--text); }
-.dot.green { background: var(--accent); }
+.dot.green { background: var(--success); }
 .dot.amber { background: var(--warn); }
 .dot.red { background: var(--danger); }
 .dot.blue { background: var(--info); }

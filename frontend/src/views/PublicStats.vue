@@ -402,11 +402,11 @@ onUnmounted(() => {
 .plist { list-style: none; margin: 0; padding: 6px 20px; }
 .plist li { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); min-width: 0; }
 .plist li:last-child { border-bottom: 0; }
-.dot.green { background: var(--accent); }
+.dot.green { background: var(--success); }
 .pms { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); padding: 2px 8px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); white-space: nowrap; }
 .pms svg { width: 12px; height: 12px; }
 .pms.deaths { color: var(--text-2); }
-.pms.green { color: var(--accent); }
+.pms.green { color: var(--success); }
 .pms.amber { color: var(--warn); }
 .pms.red { color: var(--danger); }
 .empty.small { padding: 36px 20px; font-size: 13px; }
