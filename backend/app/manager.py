@@ -20,6 +20,7 @@ from typing import Any, Awaitable, Callable, Optional
 
 import psutil
 
+from . import cpulimit
 from . import java as javamod
 from . import legacy
 from . import players as playersmod
@@ -262,6 +263,7 @@ class ServerInstance:
         self.players_store = JsonStore(PANEL_DIR / "players" / f"{cfg.id}.json", lambda: {"attempts": {}, "known": {}})
         self._map_render = None
         self._chunky = None
+        self._cpu_limiter: cpulimit.CpuLimitHandle | None = None
         self._proxy_players: dict[str, list] = {}  # lowercase name -> [name, open connections, since]
         self._chat_log_sig: tuple | None = None
         self._chat_rot_sig: tuple | None = None
@@ -721,6 +723,7 @@ class ServerInstance:
             "cpu": last["cpu"] if last else 0,
             "mem": last["mem"] if last else 0,
             "max_ram_mb": self.cfg.java.max_ram_mb,
+            "cpu_limit_percent": self.cfg.java.cpu_limit_percent,
             "started_at": self.started_at if self.running else None,
             "job": self.job,
             "required_java": self.cfg.required_java,
@@ -913,6 +916,7 @@ class ServerInstance:
         xms = j.max_ram_mb if j.flags_preset == "aikar" else min(j.min_ram_mb, j.max_ram_mb)
         cmd = [str(java), f"-Xms{xms}M", f"-Xmx{j.max_ram_mb}M"]
         cmd += jvm_flags(j.flags_preset, j.max_ram_mb, java_feature)
+        cmd += cpulimit.jvm_cpu_flags(j.cpu_limit_percent)
         cmd += ["-Dterminal.jline=false", "-Dterminal.ansi=true", "-Dlog4j2.formatMsgNoLookups=true",
                 "-Dfile.encoding=UTF-8", "-Djava.awt.headless=true"]
         try:
@@ -928,7 +932,7 @@ class ServerInstance:
             cmd.append(f"@{self.cfg.launch.target}")
         cmd.append("nogui")
         cmd += extra_server
-        return cmd
+        return cpulimit.wrap_command(cmd, j.cpu_limit_percent)
 
     async def start(self) -> None:
         async with self._lock:
@@ -995,7 +999,13 @@ class ServerInstance:
                 feature, java = await javamod.ensure_java(self.cfg.java.version or required, self.panel_log)
                 self.java_feature = feature
                 cmd = self.build_command(java, feature)
-                self.panel_log(f"Uruchamianie serwera (Java {feature}, RAM {self.cfg.java.min_ram_mb}–{self.cfg.java.max_ram_mb} MB)…")
+                if self.cfg.java.cpu_limit_percent:
+                    self.panel_log(
+                        f"Uruchamianie serwera (Java {feature}, RAM {self.cfg.java.min_ram_mb}–{self.cfg.java.max_ram_mb} MB, "
+                        f"limit CPU {self.cfg.java.cpu_limit_percent}%)…"
+                    )
+                else:
+                    self.panel_log(f"Uruchamianie serwera (Java {feature}, RAM {self.cfg.java.min_ram_mb}–{self.cfg.java.max_ram_mb} MB)…")
                 self.online.clear()
                 self._stop_requested = False
                 self.exit_code = None
@@ -1003,12 +1013,19 @@ class ServerInstance:
                     *cmd, cwd=str(self.dir),
                     stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
                     limit=1024 * 1024, start_new_session=True,
-                    env=server_env(cmd[0]),
+                    env=server_env(java),
                 )
             except Exception as exc:
                 self.panel_log(f"Nie udało się uruchomić: {exc}")
                 self.set_state("crashed")
                 raise ServerError(str(exc)) from exc
+            self._cpu_limiter = None
+            if self.cfg.java.cpu_limit_percent:
+                try:
+                    self._cpu_limiter = await cpulimit.attach(self.cfg.id, self.proc.pid, self.cfg.java.cpu_limit_percent)
+                except Exception as exc:  # noqa: BLE001 – CPU limiter must never prevent server startup
+                    self._cpu_limiter = None
+                    self.panel_log(f"Limit CPU: nie udało się zastosować – {exc}")
             self.started_at = time.time()
             self._start_seq = self._seq
             vp = getattr(self.m, "voice", None)
@@ -1234,10 +1251,20 @@ class ServerInstance:
         self.players_store.save()
         self.broadcast({"type": "attempt", "name": name})
 
+    async def _release_cpu_limiter(self, *, clear: bool = False) -> None:
+        limiter = getattr(self, "_cpu_limiter", None)
+        if limiter is None:
+            return
+        with contextlib.suppress(Exception):
+            await limiter.release()
+        if clear or not limiter.has_pending_cleanup():
+            self._cpu_limiter = None
+
     async def _wait_exit(self, proc: asyncio.subprocess.Process, reader: asyncio.Task) -> None:
         code = await proc.wait()
         with contextlib.suppress(Exception):
             await asyncio.wait_for(reader, 5)
+        await self._release_cpu_limiter(clear=True)
         self.exit_code = code
         with contextlib.suppress(Exception):
             self.refresh_chat_history()
@@ -1335,6 +1362,7 @@ class ServerInstance:
             self._stop_requested = True
             self.set_state("stopping")
             self.panel_log("Zatrzymywanie serwera…")
+            await self._release_cpu_limiter()
             try:
                 await self.send_command("stop", echo=False)
             except Exception:
@@ -1358,6 +1386,7 @@ class ServerInstance:
         if self.running and self.proc:
             self._stop_requested = True
             self.panel_log("Wymuszone zatrzymanie (kill).")
+            await self._release_cpu_limiter()
             with contextlib.suppress(ProcessLookupError):
                 os.killpg(self.proc.pid, signal.SIGKILL) if hasattr(os, "killpg") else self.proc.kill()
             await self.proc.wait()

@@ -105,9 +105,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     VARDEN_BEDROCK_PORT=19132 \
     TZ=Europe/Warsaw
 
-# tini: proper PID 1 / signal forwarding; fontconfig+freetype: needed by some mods (maps, image rendering)
+# tini: proper PID 1 / signal forwarding; fontconfig+freetype: needed by some mods (maps, image rendering); cpulimit: per-server CPU quota in containers
 RUN apt-get update \
- && apt-get install -y --no-install-recommends tini ca-certificates tzdata fontconfig libfreetype6 procps \
+ && apt-get install -y --no-install-recommends tini ca-certificates tzdata fontconfig libfreetype6 procps cpulimit \
  && rm -rf /var/lib/apt/lists/* \
  && groupadd -g 1000 varden && useradd -u 1000 -g 1000 -m -d /home/varden varden
 

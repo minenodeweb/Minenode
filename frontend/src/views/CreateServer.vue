@@ -58,6 +58,10 @@
               <label>{{ $t('Pamięć RAM') }}</label>
               <RamPicker :fixed-min="form.java.flags_preset === 'aikar'" v-model:min="form.java.min_ram_mb" v-model:max="form.java.max_ram_mb" :total-bytes="sys?.mem_total" :other-bytes="otherBytes" />
             </div>
+            <div class="field">
+              <label>{{ $t('Limit CPU') }}</label>
+              <CpuPicker v-model="form.java.cpu_limit_percent" :cpu-count="sys?.cpu_count" :backend="sys?.cpu_limit_backend" />
+            </div>
             <label class="eula">
               <input v-model="form.eula" type="checkbox" />
               <span>{{ $t('Akceptuję') }} <a href="https://aka.ms/MinecraftEULA" target="_blank" rel="noopener">Minecraft EULA</a>{{ $t('. Jest to wymagane przez Mojang do uruchomienia serwera.') }}</span>
@@ -88,6 +92,7 @@
             <dt>{{ $t('Wersja') }}</dt><dd class="mono">{{ form.mc_version || '—' }}</dd>
             <dt v-if="!['vanilla', 'custom'].includes(form.type)">{{ $t('Loader/build') }}</dt><dd v-if="!['vanilla', 'custom'].includes(form.type)" class="mono">{{ form.loader_version || $t('najnowszy') }}</dd>
             <dt>RAM</dt><dd>{{ formatMB(form.java.max_ram_mb) }}</dd>
+            <dt>{{ $t('Limit CPU') }}</dt><dd>{{ form.java.cpu_limit_percent ? `${form.java.cpu_limit_percent}%` : $t('bez limitu') }}</dd>
             <dt>{{ $t('Gracze') }}</dt><dd>{{ $t('{n} · {mode}', { n: opts.max_players, mode: $t(opts.online_mode ? 'premium' : opts.auth_enabled ? 'z logowaniem' : 'bez weryfikacji') }) }}</dd>
             <dt v-if="opts.bedrock">Bedrock</dt><dd v-if="opts.bedrock">{{ $t('tak') }}</dd>
             <dt>{{ $t('Świat') }}</dt><dd>{{ worldSummary }}</dd>
@@ -111,6 +116,7 @@ import { Package, Upload, CheckCircle2, Coffee, Loader2, Rocket } from 'lucide-v
 import VersionPicker from '../components/VersionPicker.vue'
 import DomainAddon from '../components/DomainAddon.vue'
 import RamPicker from '../components/RamPicker.vue'
+import CpuPicker from '../components/CpuPicker.vue'
 import EngineIcon from '../components/EngineIcon.vue'
 import WorldgenPicker from '../components/WorldgenPicker.vue'
 import CreateSettings from '../components/CreateSettings.vue'
@@ -128,7 +134,7 @@ const busy = ref(false)
 const subTouched = ref(false)
 const form = reactive({
   type: 'paper', mc_version: '', loader_version: null, name: '', subdomain: '', domain: null, eula: false,
-  java: { min_ram_mb: 2048, max_ram_mb: 4096, flags_preset: 'aikar', extra_jvm_args: '', extra_server_args: '' },
+  java: { min_ram_mb: 2048, max_ram_mb: 4096, cpu_limit_percent: null, flags_preset: 'aikar', extra_jvm_args: '', extra_server_args: '' },
 })
 const autoSub = computed(() => slugify(form.name))
 const address = computed(() => {

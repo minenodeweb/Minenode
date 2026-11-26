@@ -13,6 +13,9 @@ services:
       - varden-data:/data
       # Optional backup destination on a NAS / second disk – add it in Panel settings → Backup destinations:
       # - /mnt/nas/minecraft-backups:/backups/nas
+      # Optional: native Linux kernel cgroup v2 CPU limits inside Docker (otherwise cpulimit is used automatically):
+      # - /sys/fs/cgroup:/sys/fs/cgroup:rw
+    # cgroup: private  # uncomment with /sys/fs/cgroup:rw above if your Docker daemon defaults to host cgroupns
     environment:
       TZ: Europe/Warsaw
       PUID: "1000"

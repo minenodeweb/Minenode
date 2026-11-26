@@ -21,6 +21,41 @@ for legacy in $(env | sed -n 's/^\(MINENODE_[A-Z0-9_]*\)=.*/\1/p'); do
   echo "[varden] $legacy is deprecated – rename it to VARDEN_$suffix"
 done
 
+# Best-effort cgroup v2 delegation for per-server CPU quotas when /sys/fs/cgroup is mounted writable.
+setup_cgroup_v2() {
+  cg="/sys/fs/cgroup"
+  [ -w "$cg/cgroup.subtree_control" ] || return 0
+  [ -r "$cg/cgroup.controllers" ] || return 0
+  grep -qw cpu "$cg/cgroup.controllers" 2>/dev/null || return 0
+
+  mkdir -p "$cg/varden/panel" "$cg/varden/servers" 2>/dev/null || return 0
+  if [ -r "$cg/cgroup.procs" ] && [ -w "$cg/varden/panel/cgroup.procs" ]; then
+    while IFS= read -r pid; do
+      [ -z "$pid" ] || printf '%s\n' "$pid" > "$cg/varden/panel/cgroup.procs" 2>/dev/null || true
+    done < "$cg/cgroup.procs"
+  fi
+  if [ -r "$cg/varden/cgroup.procs" ] && [ -w "$cg/varden/panel/cgroup.procs" ]; then
+    while IFS= read -r pid; do
+      [ -z "$pid" ] || printf '%s\n' "$pid" > "$cg/varden/panel/cgroup.procs" 2>/dev/null || true
+    done < "$cg/varden/cgroup.procs"
+  fi
+
+  printf '+cpu\n' > "$cg/cgroup.subtree_control" 2>/dev/null || return 0
+  printf '+cpu\n' > "$cg/varden/cgroup.subtree_control" 2>/dev/null || return 0
+  printf '+cpu\n' > "$cg/varden/servers/cgroup.subtree_control" 2>/dev/null || return 0
+
+  chown "$PUID:$PGID" \
+    "$cg/varden" \
+    "$cg/varden/cgroup.procs" \
+    "$cg/varden/panel" \
+    "$cg/varden/panel/cgroup.procs" \
+    "$cg/varden/servers" \
+    "$cg/varden/servers/cgroup.procs" \
+    "$cg/varden/servers/cgroup.subtree_control" 2>/dev/null || return 0
+
+  export VARDEN_CGROUP_SERVERS="$cg/varden/servers"
+}
+
 if [ "$(id -u)" = "0" ]; then
   if [ "$(id -g varden)" != "$PGID" ]; then groupmod -o -g "$PGID" varden; fi
   if [ "$(id -u varden)" != "$PUID" ]; then usermod -o -u "$PUID" varden; fi
@@ -29,6 +64,7 @@ if [ "$(id -u)" = "0" ]; then
     echo "[varden] Setting owner of /data to $PUID:$PGID…"
     chown -R "$PUID:$PGID" /data
   fi
+  setup_cgroup_v2 || true
   export HOME=/home/varden
   exec setpriv --reuid="$PUID" --regid="$PGID" --init-groups "$@"
 fi

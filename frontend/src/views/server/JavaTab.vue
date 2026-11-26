@@ -46,6 +46,13 @@
       </section>
 
       <section class="card">
+        <div class="card-head"><Cpu class="hi" /><h3>{{ $t('Limit CPU') }}</h3></div>
+        <div class="card-body">
+          <CpuPicker v-model="j.cpu_limit_percent" :cpu-count="info.cpu_count" :backend="info.cpu_limit_backend" />
+        </div>
+      </section>
+
+      <section class="card">
         <div class="card-head"><Zap class="hi" /><h3>{{ $t('Optymalizacje JVM') }}</h3></div>
         <div class="card-body col" style="gap: 10px">
           <label v-for="p in presets" :key="p.id" class="preset" :class="{ active: j.flags_preset === p.id }">
@@ -98,8 +105,9 @@
 </template>
 <script setup>
 import { computed, inject, onMounted, ref } from 'vue'
-import { Coffee, MemoryStick, Zap, Terminal, SquareTerminal, Copy, Save, AlertTriangle, Loader2, FileCode2, RotateCcw } from 'lucide-vue-next'
+import { Coffee, MemoryStick, Cpu, Zap, Terminal, SquareTerminal, Copy, Save, AlertTriangle, Loader2, FileCode2, RotateCcw } from 'lucide-vue-next'
 import RamPicker from '../../components/RamPicker.vue'
+import CpuPicker from '../../components/CpuPicker.vue'
 import { api } from '../../api'
 import { toast, toastError } from '../../store'
 import { copyText } from '../../utils'
@@ -154,7 +162,7 @@ async function save(restart = false) {
     } else toast('Zapisano ustawienia uruchamiania', 'success')
   } catch (e) { toastError(e) } finally { saving.value = false }
 }
-const cls = (a, i) => (i === 0 ? 'c-bin' : a.startsWith('-Xm') ? 'c-mem' : a.startsWith('-XX') ? 'c-xx' : a.startsWith('-D') ? 'c-d' : a === '-jar' || a.startsWith('@') ? 'c-jar' : '')
+const cls = (a, i) => (i === 0 || a === 'java' ? 'c-bin' : a.startsWith('-Xm') || a.startsWith('CPUQuota=') ? 'c-mem' : a.startsWith('-XX') ? 'c-xx' : a.startsWith('-D') ? 'c-d' : a === '-jar' || a.startsWith('@') ? 'c-jar' : '')
 async function copyCmd() { if (await copyText(info.value.command.join(' '))) toast('Skopiowano', 'success', 1500) }
 </script>
 <style scoped>

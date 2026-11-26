@@ -160,7 +160,7 @@ const busy = ref(false)
 const file = ref(null)
 const dragOver = ref(false)
 const uploadProgress = ref(null)
-const installForm = ref({ name: '', subdomain: '', eula: false, max_ram_mb: 6144, min_ram_mb: 2048 })
+const installForm = ref({ name: '', subdomain: '', eula: false, max_ram_mb: 6144, min_ram_mb: 2048, cpu_limit_percent: null })
 
 onMounted(async () => {
   search(true)
@@ -202,7 +202,7 @@ async function open(p) {
   } catch (e) { toastError(e) } finally { versionsLoading.value = false }
 }
 
-const javaOf = (f) => ({ min_ram_mb: Math.min(f.min_ram_mb, f.max_ram_mb), max_ram_mb: f.max_ram_mb, flags_preset: 'aikar' })
+const javaOf = (f) => ({ min_ram_mb: Math.min(f.min_ram_mb, f.max_ram_mb), max_ram_mb: f.max_ram_mb, cpu_limit_percent: f.cpu_limit_percent || null, flags_preset: 'aikar' })
 
 async function installSelected() {
   busy.value = true
@@ -238,6 +238,7 @@ async function installFile() {
     fd.append('subdomain', f.subdomain || '')
     fd.append('domain', f.domain || '')
     fd.append('max_ram_mb', f.max_ram_mb)
+    if (f.cpu_limit_percent != null) fd.append('cpu_limit_percent', String(f.cpu_limit_percent))
     fd.append('eula', f.eula ? 'true' : 'false')
     const s = await uploadWithProgress('/servers/modpack/upload', fd, (p) => (uploadProgress.value = p))
     toast(t('Instalowanie modpacka „{name}”…', { name: s.name }), 'success')

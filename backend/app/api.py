@@ -26,7 +26,7 @@ from starlette.websockets import WebSocketDisconnect
 from . import storage as storage_mod
 from . import bedrock_compat, datapacks as dpacks, legacy, packs, worldgen
 from . import auth, auth_sessions, content, files, java as javamod, modpacks, players as pl, providers, resourcepacks as rpacks, voice
-from . import chunky, itemicons, lod, playerstats, skins, squaremap, updates, webmap
+from . import chunky, cpulimit, itemicons, lod, playerstats, skins, squaremap, updates, webmap
 from .models import ChunkySettings
 from .backups import safe_extract
 from .config import BEDROCK_PORT, DATA_DIR, PANEL_PORT, PROXY_PORT, SECURE_COOKIES, TMP_DIR, VERSION, CURSEFORGE_API_KEY_ENV
@@ -308,6 +308,7 @@ async def system(_: str = Depends(auth.require_user)):
         "version": VERSION,
         "cpu_percent": psutil.cpu_percent(None),
         "cpu_count": psutil.cpu_count() or 1,
+        "cpu_limit_backend": cpulimit.backend_mode(),
         "load": os.getloadavg() if hasattr(os, "getloadavg") else None,
         "mem_total": min(vm.total, limit) if limit else vm.total,
         "mem_used": vm.total - vm.available,
@@ -784,7 +785,8 @@ async def create_from_modpack(body: CreateModpack, _: str = Depends(auth.require
 @run_errors
 async def create_from_upload(
     file: UploadFile = File(...), name: str = Form(...), subdomain: str = Form(""), domain: str = Form(""),
-    max_ram_mb: int = Form(4096), eula: bool = Form(False), _: str = Depends(auth.require_user),
+    max_ram_mb: int = Form(4096), cpu_limit_percent: Optional[int] = Form(None), eula: bool = Form(False),
+    _: str = Depends(auth.require_user),
 ):
     if not eula:
         raise HTTPException(400, "Musisz zaakceptować EULA Minecrafta")
@@ -794,7 +796,7 @@ async def create_from_upload(
     if not zipfile.is_zipfile(dest):
         dest.unlink(missing_ok=True)
         raise HTTPException(400, "Plik nie jest archiwum ZIP/.mrpack")
-    java = JavaConfig(max_ram_mb=max_ram_mb, min_ram_mb=min(1024, max_ram_mb))
+    java = JavaConfig(max_ram_mb=max_ram_mb, min_ram_mb=min(1024, max_ram_mb), cpu_limit_percent=cpu_limit_percent)
     inst = manager.create(name=name, type="vanilla", mc_version="?", loader_version=None,
                           subdomain=_unique_subdomain(subdomain or None, name), java=java.model_dump(),
                           modpack=ModpackInfo(source="file", name=file.filename or name).model_dump())
@@ -947,6 +949,8 @@ async def startup_info(sid: str, _: str = Depends(auth.require_user)):
         "installed_java": [r["feature"] for r in await asyncio.to_thread(javamod.installed_runtimes)],
         "mem_total": min(vm.total, limit) if limit else vm.total,
         "allocated_other": sum(i.cfg.java.max_ram_mb for i in manager.instances.values() if i.cfg.id != sid) * 1048576,
+        "cpu_count": psutil.cpu_count() or 1,
+        "cpu_limit_backend": cpulimit.backend_mode(),
     }
 
 

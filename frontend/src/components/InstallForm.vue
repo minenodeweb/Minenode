@@ -18,6 +18,11 @@
       <RamPicker :fixed-min="(modelValue.flags_preset || 'aikar') === 'aikar'" :min="modelValue.min_ram_mb" :max="modelValue.max_ram_mb" :total-bytes="sys?.mem_total"
                  @update:min="set('min_ram_mb', $event)" @update:max="set('max_ram_mb', $event)" />
     </div>
+    <div class="field">
+      <label>{{ $t('Limit CPU') }}</label>
+      <CpuPicker :model-value="modelValue.cpu_limit_percent ?? null" :cpu-count="sys?.cpu_count" :backend="sys?.cpu_limit_backend"
+                 @update:model-value="set('cpu_limit_percent', $event)" />
+    </div>
     <label class="eula">
       <input type="checkbox" :checked="modelValue.eula" @change="set('eula', $event.target.checked)" />
       <span>{{ $t('Akceptuję') }} <a href="https://aka.ms/MinecraftEULA" target="_blank" rel="noopener">Minecraft EULA</a>.</span>
@@ -26,6 +31,7 @@
 </template>
 <script setup>
 import RamPicker from './RamPicker.vue'
+import CpuPicker from './CpuPicker.vue'
 import DomainAddon from './DomainAddon.vue'
 import { slugify } from '../utils'
 const props = defineProps({ modelValue: Object, settings: Object, sys: Object })

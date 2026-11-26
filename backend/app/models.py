@@ -19,9 +19,17 @@ class JavaConfig(BaseModel):
     version: Optional[int] = None  # None -> automatic (based on Minecraft version)
     min_ram_mb: int = Field(default=1024, ge=256, le=1024 * 512)
     max_ram_mb: int = Field(default=4096, ge=512, le=1024 * 512)
+    cpu_limit_percent: Optional[int] = Field(default=None, ge=10, le=6400)  # None -> unlimited; 100 = 1 core
     flags_preset: FlagsPreset = "aikar"
     extra_jvm_args: str = ""
     extra_server_args: str = ""
+
+    @field_validator("cpu_limit_percent", mode="before")
+    @classmethod
+    def _norm_cpu_limit(cls, v):
+        if v is None or (isinstance(v, str) and v.strip() in ("", "0")) or (not isinstance(v, bool) and v == 0):
+            return None
+        return v
 
 
 class ChunkySettings(BaseModel):
