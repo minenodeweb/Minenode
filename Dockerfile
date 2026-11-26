@@ -92,9 +92,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
       "$TAG" "$VERSION" "$PATCH_ID" "$PICOLIMBO_REPO" "$BIN_SHA" "$BUILT_AT" > /out/picolimbo-version.json
 
 # ---------------------------------------------------------------- runtime
-FROM python:3.12-slim-bookworm
-LABEL org.opencontainers.image.title="Varden" \
-      org.opencontainers.image.description="Minecraft server management panel with built-in reverse proxy"
+FROM python:3.14-slim-bookworm
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -123,11 +121,29 @@ COPY --from=picolimbo /out/picolimbo-version.json ./bin/picolimbo-version.json
 COPY --from=picolimbo /out/licenses ./licenses
 COPY --from=bedrock_ext /ext/VardenRouter.jar ./bedrock_ext/VardenRouter.jar
 COPY --from=web /web/dist ./static
+COPY LICENSE NOTICE ./
 COPY docker/entrypoint.sh /entrypoint.sh
 COPY reset_password.sh /usr/local/bin/reset_password.sh
 # strip Windows line endings (a CRLF checkout breaks the shebang: "exec /entrypoint.sh failed")
 RUN sed -i 's/\r$//' /entrypoint.sh /usr/local/bin/reset_password.sh && chmod +x /entrypoint.sh /usr/local/bin/reset_password.sh \
  && mkdir -p /data && chown varden:varden /data
+
+ARG IMAGE_VERSION="1.0.0"
+ARG IMAGE_REVISION=""
+ARG IMAGE_CREATED=""
+
+LABEL org.opencontainers.image.title="Varden" \
+      org.opencontainers.image.description="Self-hosted Minecraft server management panel with built-in reverse proxy, Bedrock gateway, live maps, and backups" \
+      org.opencontainers.image.url="https://github.com/Varden-app/Varden" \
+      org.opencontainers.image.source="https://github.com/Varden-app/Varden" \
+      org.opencontainers.image.documentation="https://github.com/Varden-app/Varden/tree/main/docs" \
+      org.opencontainers.image.authors="Bernard Wieczorek, Piotr Janaszak" \
+      org.opencontainers.image.vendor="Varden" \
+      org.opencontainers.image.licenses="Apache-2.0" \
+      org.opencontainers.image.base.name="docker.io/library/python:3.14-slim-bookworm" \
+      org.opencontainers.image.version="${IMAGE_VERSION}" \
+      org.opencontainers.image.revision="${IMAGE_REVISION}" \
+      org.opencontainers.image.created="${IMAGE_CREATED}"
 
 VOLUME ["/data"]
 EXPOSE 8080 25565 24454/udp 19132/tcp 19132/udp

@@ -131,7 +131,65 @@ def test_dockerfile_builds_picolimbo_latest_without_runtime_compiler():
     assert "COPY --from=picolimbo /out/pico_limbo ./bin/pico_limbo" in text
     assert "COPY --from=picolimbo /out/picolimbo-version.json ./bin/picolimbo-version.json" in text
 
-    runtime_section = text.split("FROM python:3.12-slim-bookworm", 1)[1]
+    runtime_section = text.split("FROM python:3.14-slim-bookworm", 1)[1]
     assert "gcc" not in runtime_section
     assert "libc6-dev" not in runtime_section
     assert "patch" not in runtime_section
+
+
+def test_dockerfile_oci_metadata_and_notices():
+    root = Path(__file__).resolve().parents[2]
+    dockerfile = (root / "Dockerfile").read_text(encoding="utf-8")
+    deploy_cmd = (root / "deploy.cmd").read_text(encoding="utf-8")
+
+    runtime_section = dockerfile.split("FROM python:3.14-slim-bookworm", 1)[1]
+    assert "COPY LICENSE NOTICE ./" in runtime_section
+
+    pip_pos = runtime_section.index("RUN pip install -r requirements.txt")
+    for arg in ("IMAGE_VERSION", "IMAGE_REVISION", "IMAGE_CREATED"):
+        decl = f"ARG {arg}="
+        assert decl in runtime_section
+        assert runtime_section.index(decl) > pip_pos
+
+    expected_labels = [
+        'org.opencontainers.image.title="Varden"',
+        'org.opencontainers.image.description="Self-hosted Minecraft server management panel with built-in reverse proxy, Bedrock gateway, live maps, and backups"',
+        'org.opencontainers.image.url="https://github.com/Varden-app/Varden"',
+        'org.opencontainers.image.source="https://github.com/Varden-app/Varden"',
+        'org.opencontainers.image.documentation="https://github.com/Varden-app/Varden/tree/main/docs"',
+        'org.opencontainers.image.authors="Bernard Wieczorek, Piotr Janaszak"',
+        'org.opencontainers.image.vendor="Varden"',
+        'org.opencontainers.image.licenses="Apache-2.0"',
+        'org.opencontainers.image.base.name="docker.io/library/python:3.14-slim-bookworm"',
+        'org.opencontainers.image.version="${IMAGE_VERSION}"',
+        'org.opencontainers.image.revision="${IMAGE_REVISION}"',
+        'org.opencontainers.image.created="${IMAGE_CREATED}"',
+    ]
+    for label in expected_labels:
+        assert label in runtime_section
+
+    for arg in ("IMAGE_VERSION", "IMAGE_REVISION", "IMAGE_CREATED"):
+        assert f'--build-arg "{arg}=!{arg}!"' in deploy_cmd
+
+    assert "LEGACY_IMAGE" not in deploy_cmd
+    assert "zzabek/minenode" not in deploy_cmd
+    assert deploy_cmd.count("docker push") == 1
+
+    readme = (root / "README.md").read_text(encoding="utf-8")
+    assert "Python-3.14" in readme and "Python-3.12" not in readme
+    assert "zzabek/varden:latest" in readme and "nofile" in readme
+
+    dockerhub_md = (root / "docker" / "DOCKERHUB.md").read_text(encoding="utf-8")
+    assert len(dockerhub_md.encode("utf-8")) <= 25000
+    assert "Python-3.14" in dockerhub_md and "Python-3.12" not in dockerhub_md and "nofile" in dockerhub_md
+    for token in (
+        "https://github.com/Varden-app/Varden",
+        "Bernard Wieczorek",
+        "Piotr Janaszak",
+        "Apache",
+        "zzabek/varden:latest",
+    ):
+        assert token in dockerhub_md
+
+    arch_md = (root / "docs" / "architecture.md").read_text(encoding="utf-8")
+    assert "Python 3.14" in arch_md and "Python 3.12" not in arch_md

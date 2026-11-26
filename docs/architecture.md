@@ -23,7 +23,7 @@
 
 ## Backend
 
-`backend/app` – Python 3.12, FastAPI, asyncio. `backend/proxy` – Rust (`tokio`). `backend/bedrock_ext` – Java Geyser extension.
+`backend/app` – Python 3.14, FastAPI, asyncio. `backend/proxy` – Rust (`tokio`). `backend/bedrock_ext` – Java Geyser extension.
 
 | Module | Role |
 |--------|------|
