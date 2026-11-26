@@ -31,7 +31,7 @@ from .models import ChunkySettings
 from .backups import safe_extract
 from .config import BEDROCK_PORT, DATA_DIR, PANEL_PORT, PROXY_PORT, SECURE_COOKIES, TMP_DIR, VERSION, CURSEFORGE_API_KEY_ENV
 from .manager import Manager, ServerError, ServerInstance
-from .models import BackupSchedule, HOSTNAME_RE, JavaConfig, ModpackInfo, PanelSettings, PublicPageSettings, SERVER_TEXTS_EN, ServerConfig, ServerType, SERVER_TYPES
+from .models import BackupSchedule, HOSTNAME_RE, JavaConfig, ModpackInfo, PanelSettings, PublicPageSettings, SERVER_TEXTS_EN, ServerConfig, ServerType, SERVER_TYPES, WebMapSettings
 from .properties import MANAGED_KEYS, read_properties, update_properties
 
 router = APIRouter(prefix="/api")
@@ -2161,42 +2161,30 @@ async def public_server_icon(sid: str):
 
 _PROXY_HEADERS = ("content-type", "content-encoding", "cache-control", "etag", "last-modified", "expires", "x-accel-buffering")
 _BLUEMAP_TILE_RE = re.compile(r"^maps/[^/]+/tiles/(\d+)/x-?[\d/]+z-?[\d/]+\.(prbm|png)(\.gz)?$")
-_BLUEMAP_BOOST_SCRIPT = """<script>
-(function(){
-  try {
-    if (!localStorage.getItem("varden-bm-hires-v1")) {
-      var h = Number(JSON.parse(localStorage.getItem("bluemap-hiresViewDistance") || "0"));
-      if (!h || h <= 200) localStorage.setItem("bluemap-hiresViewDistance", "500");
-      var l = Number(JSON.parse(localStorage.getItem("bluemap-lowresViewDistance") || "0"));
-      if (!l || l <= 2000) localStorage.setItem("bluemap-lowresViewDistance", "4000");
-      localStorage.setItem("varden-bm-hires-v1", "1");
-    }
-  } catch (e) {}
-  var tries = 0;
-  var hook = setInterval(function(){
-    tries++;
-    var bm = window.bluemap;
-    if (!bm || !bm.mapViewer) { if (tries > 200) clearInterval(hook); return; }
-    clearInterval(hook);
-    var origReset = bm.resetCamera && bm.resetCamera.bind(bm);
-    if (origReset) {
-      bm.resetCamera = function(){
-        origReset();
-        if (bm.mapViewer && bm.mapViewer.controlsManager && bm.mapViewer.controlsManager.distance > 600) {
-          bm.mapViewer.controlsManager.distance = 450;
-          bm.mapViewer.updateLoadedMapArea();
-        }
-      };
-    }
-    if (!location.hash && bm.mapViewer.controlsManager && bm.mapViewer.controlsManager.distance >= 1000) {
-      bm.mapViewer.controlsManager.distance = 450;
-    }
-    if (bm.mapViewer.data && bm.mapViewer.data.loadedHiresViewDistance < 500) {
-      bm.mapViewer.data.loadedHiresViewDistance = 500;
-    }
-    if (bm.mapViewer.updateLoadedMapArea) bm.mapViewer.updateLoadedMapArea();
-  }, 50);
-})();
+def _bluemap_init_script(inst: ServerInstance) -> str:
+    wm = inst.cfg.webmap
+    res = webmap._bm_res_num(getattr(wm, "bluemap_resolution", 0.5))
+    hires = int(getattr(wm, "bluemap_hires_distance", 100))
+    lowres = int(getattr(wm, "bluemap_lowres_distance", 1500))
+    return f"""<script>
+(function(){{
+  try {{
+    var cfg = {{ res: {res}, hires: {hires}, lowres: {lowres} }};
+    var sig = "v2:" + cfg.res + ":" + cfg.hires + ":" + cfg.lowres;
+    if (localStorage.getItem("varden-bm-cfg") !== sig) {{
+      var mobile = (window.matchMedia && window.matchMedia("(pointer: coarse)").matches)
+        || Math.min(window.innerWidth || 9999, window.innerHeight || 9999) <= 768;
+      var res = mobile ? Math.min(cfg.res, 0.5) : cfg.res;
+      var hires = mobile ? Math.min(cfg.hires, 100) : cfg.hires;
+      var lowres = mobile ? Math.min(cfg.lowres, 1500) : cfg.lowres;
+      localStorage.setItem("bluemap-superSampling", JSON.stringify(res));
+      localStorage.setItem("bluemap-hiresViewDistance", JSON.stringify(hires));
+      localStorage.setItem("bluemap-lowresViewDistance", JSON.stringify(lowres));
+      localStorage.removeItem("varden-bm-hires-v1");
+      localStorage.setItem("varden-bm-cfg", sig);
+    }}
+  }} catch (e) {{}}
+}})();
 </script>"""
 
 _map_http_client: Any = None
@@ -2246,15 +2234,17 @@ def _serve_bluemap_disk(inst: ServerInstance, path: str, request: Request) -> Re
         raise HTTPException(404)
     if rel == "index.html" and target.is_file():
         html = target.read_text(encoding="utf-8", errors="replace")
-        html = html.replace("</head>", f"{_BLUEMAP_BOOST_SCRIPT}\n</head>", 1) if "</head>" in html else html + _BLUEMAP_BOOST_SCRIPT
+        script = _bluemap_init_script(inst)
+        html = html.replace("</head>", f"{script}\n</head>", 1) if "</head>" in html else html + script
         return Response(content=html, media_type="text/html; charset=utf-8",
                         headers={"Cache-Control": "no-cache", "X-Frame-Options": "SAMEORIGIN"})
     if m := _BLUEMAP_TILE_RE.match(rel):
         lod, is_gz = m.group(1), bool(m.group(3))
         media_type = "application/octet-stream" if lod == "0" else "image/png"
-        headers = {"Cache-Control": "no-cache", "X-Frame-Options": "SAMEORIGIN"}
-        return _serve_file_or_gzip(target, request, headers, media_type=media_type, allow_gz_fallback=not is_gz) \
-            or Response(status_code=204, headers=headers)
+        tile_headers = {"Cache-Control": "public, max-age=60, stale-while-revalidate=300", "X-Frame-Options": "SAMEORIGIN"}
+        miss_headers = {"Cache-Control": "no-cache", "X-Frame-Options": "SAMEORIGIN"}
+        return _serve_file_or_gzip(target, request, tile_headers, media_type=media_type, allow_gz_fallback=not is_gz) \
+            or Response(status_code=204, headers=miss_headers)
     cc = "public, max-age=31536000, immutable" if rel.startswith("assets/") else "no-cache"
     headers = {"Cache-Control": cc, "X-Frame-Options": "SAMEORIGIN"}
     fallback_type = "application/json" if target.suffix.lower() == ".json" else "application/octet-stream"
@@ -2469,6 +2459,11 @@ class WebMapBody(BaseModel):
     show_players: Optional[bool] = None
     render_3d: Optional[bool] = None
     always_on: Optional[bool] = None  # show the map while the server is stopped
+    bluemap_resolution: Optional[float] = None
+    bluemap_hires_distance: Optional[int] = Field(default=None, ge=0, le=500)
+    bluemap_lowres_distance: Optional[int] = Field(default=None, ge=500, le=6000)
+    bluemap_render_threads: Optional[int] = Field(default=None, ge=1, le=64)
+    bluemap_pause_on_players: Optional[bool] = None
     update: bool = False  # install the newest build now
 
 
@@ -2478,16 +2473,12 @@ async def webmap_set(sid: str, body: WebMapBody, _: str = Depends(auth.require_u
     inst = inst_or_404(sid)
     wm = inst.cfg.webmap
     before = wm.model_copy()
-    if body.provider is not None:
-        wm.provider = body.provider
-    if body.show_players is not None:
-        wm.show_players = body.show_players
-    if body.render_3d is not None:
-        wm.render_3d = body.render_3d
-    if body.enabled is not None:
-        wm.enabled = body.enabled
-    if body.always_on is not None:
-        wm.always_on = body.always_on
+    patch = {k: v for k, v in body.model_dump(exclude_unset=True, exclude={"update"}).items() if v is not None}
+    try:
+        wm = WebMapSettings.model_validate({**wm.model_dump(), **patch})
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    inst.cfg.webmap = wm
     if wm.model_dump(exclude={"always_on"}) == before.model_dump(exclude={"always_on"}) and not body.update:
         # Only "map 24/7" changed: the panel decides what it serves, nothing to install or restart.
         manager.save_server(inst.cfg)

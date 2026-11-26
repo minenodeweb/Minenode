@@ -133,19 +133,21 @@ def test_bluemap_first_start_only_generates_configs_then_accepts(tmp_path):
     }), encoding="utf-8")
     assert webmap.bluemap_write_config(inst) is True
     core = (d / "core.conf").read_text()
-    assert "accept-download: false" in core and "render-thread-count: 1" in core
+    expected_threads = webmap.bluemap_default_threads()
+    assert f"accept-download: false" in core and f"render-thread-count: {expected_threads}" in core
     web = (d / "webserver.conf").read_text()
     assert 'ip: "127.0.0.1"' in web and "port: 28102" in web and 'webroot: "bluemap/web"' in web
     assert "sse-enabled: true" in web and "max-connection-count: 500" in web
     webapp = (d / "webapp.conf").read_text()
-    assert "default-to-flat-view: true" in webapp
-    assert "hires-slider-default: 500" in webapp and "hires-slider-max: 1000" in webapp
-    assert "lowres-slider-default: 4000" in webapp and "lowres-slider-max: 10000" in webapp
+    assert "default-to-flat-view: true" in webapp and "resolution-default: 0.5" in webapp
+    assert "hires-slider-min: 0" in webapp and "hires-slider-default: 100" in webapp and "hires-slider-max: 500" in webapp
+    assert "lowres-slider-min: 500" in webapp and "lowres-slider-default: 1500" in webapp and "lowres-slider-max: 6000" in webapp
     synced = json.loads((web_root / "settings.json").read_text(encoding="utf-8"))
-    assert synced["defaultToFlatView"] is True and synced["hiresSliderDefault"] == 500 and synced["hiresSliderMax"] == 1000
-    assert synced["lowresSliderDefault"] == 4000 and synced["lowresSliderMax"] == 10000
+    assert synced["defaultToFlatView"] is True and synced["resolutionDefault"] == 0.5
+    assert synced["hiresSliderMin"] == 0 and synced["hiresSliderDefault"] == 100 and synced["hiresSliderMax"] == 500
+    assert synced["lowresSliderMin"] == 500 and synced["lowresSliderDefault"] == 1500 and synced["lowresSliderMax"] == 6000
     plugin_conf = (d / "plugin.conf").read_text()
-    assert "live-player-markers: false" in plugin_conf and "hidden-game-modes:" in plugin_conf
+    assert "live-player-markers: false" in plugin_conf and "hidden-game-modes:" in plugin_conf and "player-render-limit: -1" in plugin_conf
 
     # BlueMap generated its map files on the first start (3D defaults)
     (d / "maps").mkdir()
@@ -165,6 +167,22 @@ def test_bluemap_first_start_only_generates_configs_then_accepts(tmp_path):
     assert "enable-hires: true" in m and "enable-perspective-view: true" in m and "enable-free-flight-view: true" in m
     assert "default-to-flat-view: false" in (d / "webapp.conf").read_text()
     assert (d / ".varden-force-update").is_file()
+    (d / ".varden-force-update").unlink()
+
+    # Panel sliders adjust threads, pause limit and visitor defaults without triggering a full re-render
+    inst.cfg.webmap.bluemap_resolution = 1
+    inst.cfg.webmap.bluemap_hires_distance = 250
+    inst.cfg.webmap.bluemap_lowres_distance = 3000
+    inst.cfg.webmap.bluemap_render_threads = 6
+    inst.cfg.webmap.bluemap_pause_on_players = True
+    assert webmap.bluemap_write_config(inst) is True
+    assert "render-thread-count: 6" in (d / "core.conf").read_text()
+    webapp = (d / "webapp.conf").read_text()
+    assert "resolution-default: 1" in webapp and "hires-slider-default: 250" in webapp and "lowres-slider-default: 3000" in webapp
+    assert "player-render-limit: 1" in (d / "plugin.conf").read_text()
+    synced = json.loads((web_root / "settings.json").read_text(encoding="utf-8"))
+    assert synced["resolutionDefault"] == 1 and synced["hiresSliderDefault"] == 250 and synced["lowresSliderDefault"] == 3000
+    assert not (d / ".varden-force-update").exists()
 
 
 def test_bluemap_heals_legacy_hires_false_and_reloads_online(tmp_path):
@@ -717,9 +735,9 @@ def test_bluemap_disk_fastpath_serves_gzipped_tiles_and_injects_hires_boost(tmp_
 
     from app import api
 
+    cfg = SimpleNamespace(webmap=WebMapSettings(enabled=True, provider="bluemap", port=28199))
     monkeypatch.setattr(api, "manager", SimpleNamespace(instances={"srv1": SimpleNamespace(
-        cfg=SimpleNamespace(webmap=WebMapSettings(enabled=True, provider="bluemap", port=28199)),
-        dir=tmp_path, running=True,
+        cfg=cfg, dir=tmp_path, running=True,
     )}), raising=False)
     web = tmp_path / "bluemap" / "web"
     tile = web / "maps" / "world" / "tiles" / "0" / "x0" / "z0.prbm.gz"
@@ -735,11 +753,21 @@ def test_bluemap_disk_fastpath_serves_gzipped_tiles_and_injects_hires_boost(tmp_
 
     client = TestClient(app)
     idx = client.get("/map/srv1/index.html")
-    assert idx.status_code == 200 and "varden-bm-hires-v1" in idx.text
+    assert idx.status_code == 200
+    assert "varden-bm-cfg" in idx.text and "bluemap-superSampling" in idx.text
+    assert "v2:0.5:100:1500" in idx.text and "loadedHiresViewDistance" not in idx.text
+
+    cfg.webmap = WebMapSettings(
+        enabled=True, provider="bluemap", port=28199,
+        bluemap_resolution=1, bluemap_hires_distance=250, bluemap_lowres_distance=3000,
+    )
+    assert "v2:1:250:3000" in client.get("/map/srv1/index.html").text
 
     res = client.get("/map/srv1/maps/world/tiles/0/x0/z0.prbm", headers={"Accept-Encoding": "gzip"})
     assert res.status_code == 200 and res.content == b"PRBM"
     assert res.headers.get("content-encoding") == "gzip"
+    assert "max-age=60" in (res.headers.get("cache-control") or "")
 
     missing = client.get("/map/srv1/maps/world/tiles/0/x99/z99.prbm")
     assert missing.status_code == 204
+    assert missing.headers.get("cache-control") == "no-cache"

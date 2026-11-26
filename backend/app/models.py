@@ -48,6 +48,22 @@ class WebMapSettings(BaseModel):
     render_3d: bool = False  # Dynmap/BlueMap: False renders only the light flat (2D) view
     always_on: bool = True  # show the map (from the files on disk) while the server is stopped too
     port: Optional[int] = None  # loopback web server of Dynmap/BlueMap, proxied by the panel
+    bluemap_resolution: float = 0.5  # BlueMap resolution-default (0.5, 1 or 2)
+    bluemap_hires_distance: int = Field(default=100, ge=0, le=500)  # hires-slider-default (blocks)
+    bluemap_lowres_distance: int = Field(default=1500, ge=500, le=6000)  # lowres-slider-default (blocks)
+    bluemap_render_threads: Optional[int] = Field(default=None, ge=1, le=64)  # None = auto (host cores // 2, min 1)
+    bluemap_pause_on_players: bool = False  # True -> player-render-limit: 1
+
+    @field_validator("bluemap_resolution", mode="before")
+    @classmethod
+    def _check_bluemap_resolution(cls, v) -> float:
+        try:
+            val = float(v)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Rozdzielczość BlueMap musi wynosić 0.5, 1 lub 2") from exc
+        if val not in (0.5, 1.0, 2.0):
+            raise ValueError("Rozdzielczość BlueMap musi wynosić 0.5, 1 lub 2")
+        return val
 
 
 class PublicPageSettings(BaseModel):

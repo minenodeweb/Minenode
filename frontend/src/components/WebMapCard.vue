@@ -51,6 +51,58 @@
             </div>
             <span class="tiny muted">{{ $t(viewHint) }}</span>
           </div>
+
+          <div v-if="v.provider === 'bluemap'" class="bm-settings">
+            <div class="bm-slider">
+              <div class="row">
+                <b class="small">{{ $t('Rozdzielczość podglądu (domyślna)') }}</b>
+                <span class="spacer" />
+                <span class="small num text-2">{{ bmResLabel }}</span>
+              </div>
+              <input v-model.number="bmResIdx" type="range" min="0" max="2" step="1" :disabled="busy"
+                     @change="save({ bluemap_resolution: BM_RESOLUTIONS[bmResIdx] })" />
+            </div>
+
+            <div class="bm-slider">
+              <div class="row">
+                <b class="small">{{ $t('Zasięg wysokiej jakości (Hires)') }}</b>
+                <span class="spacer" />
+                <span class="small num text-2">{{ bmHiresLabel }}</span>
+              </div>
+              <input v-model.number="bmHires" type="range" min="0" max="500" step="25" :disabled="busy"
+                     @change="save({ bluemap_hires_distance: bmHires })" />
+            </div>
+
+            <div class="bm-slider">
+              <div class="row">
+                <b class="small">{{ $t('Zasięg niskiej jakości (Lowres)') }}</b>
+                <span class="spacer" />
+                <span class="small num text-2">{{ $t('{n} bloków', { n: bmLowres }) }}</span>
+              </div>
+              <input v-model.number="bmLowres" type="range" min="500" max="6000" step="250" :disabled="busy"
+                     @change="save({ bluemap_lowres_distance: bmLowres })" />
+            </div>
+
+            <div class="tiny muted">{{ $t('Domyślne ustawienia startowe dla przeglądarki – niższe chronią telefony i laptopy. Każdy odwiedzający może sam podbić jakość w menu BlueMap.') }}</div>
+
+            <div class="divider" />
+
+            <div class="bm-slider">
+              <div class="row">
+                <b class="small">{{ $t('Wątki renderowania na serwerze') }}</b>
+                <span class="spacer" />
+                <span class="small num text-2">{{ bmThreads }} / {{ maxThreads }}</span>
+              </div>
+              <input v-model.number="bmThreads" type="range" min="1" :max="maxThreads" step="1" :disabled="busy"
+                     @change="save({ bluemap_render_threads: bmThreads })" />
+              <div class="tiny muted">{{ $t('Więcej wątków wielokrotnie przyspiesza generowanie mapy na serwerze. Zostaw 1–2 rdzenie dla Minecrafta albo włącz wstrzymywanie przy graczach.') }}</div>
+            </div>
+
+            <Toggle :model-value="!!v.bluemap_pause_on_players" :disabled="busy"
+                    :label="$t('Wstrzymaj renderowanie, gdy są gracze')"
+                    :hint="$t('BlueMap pauzuje wątki renderowania, gdy ktoś gra (brak lagów TPS), i renderuje z pełną mocą, gdy serwer jest pusty.')"
+                    @update:model-value="(on) => save({ bluemap_pause_on_players: on })" />
+          </div>
         </template>
 
         <template v-if="v.enabled">
@@ -119,19 +171,48 @@
   </section>
 </template>
 <script setup>
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { AlertTriangle, Download, Info, Loader2, Map as MapIcon, Play, RefreshCw, RotateCcw, Square } from 'lucide-vue-next'
 import Toggle from './Toggle.vue'
 import { api } from '../api'
 import { t } from '../i18n'
 import { confirmDialog, toast, toastError } from '../store'
 
+const BM_RESOLUTIONS = [0.5, 1, 2]
+
 const props = defineProps({ serverId: String })
 const v = ref(null)
 const busy = ref(false)
 const restart = ref(false)
 const renderBusy = ref('')  // '', 'update', 'full' or 'cancel'
+const bmResIdx = ref(0)
+const bmHires = ref(100)
+const bmLowres = ref(1500)
+const bmThreads = ref(1)
 let timer = null
+
+watch(() => [
+  v.value?.bluemap_resolution,
+  v.value?.bluemap_hires_distance,
+  v.value?.bluemap_lowres_distance,
+  v.value?.bluemap_render_threads,
+], ([res, hires, lowres, threads]) => {
+  if (!v.value) return
+  const idx = BM_RESOLUTIONS.indexOf(Number(res ?? 0.5))
+  bmResIdx.value = idx >= 0 ? idx : 0
+  bmHires.value = hires ?? 100
+  bmLowres.value = lowres ?? 1500
+  bmThreads.value = threads ?? 1
+}, { immediate: true })
+
+const maxThreads = computed(() => Math.max(1, v.value?.cpu_count || 1))
+const bmResLabel = computed(() => {
+  const r = BM_RESOLUTIONS[bmResIdx.value] ?? 0.5
+  if (r === 0.5) return t('0.5× (lekka)')
+  if (r === 1) return t('1× (standard)')
+  return t('2× (wysoka)')
+})
+const bmHiresLabel = computed(() => (bmHires.value <= 0 ? t('wyłączony (tylko Lowres)') : t('{n} bloków', { n: bmHires.value })))
 
 const cur = computed(() => v.value?.current || {})
 const renderState = computed(() => v.value?.render || null)
@@ -265,5 +346,7 @@ async function doRestart() {
 .seg { display: inline-flex; padding: 3px; border-radius: 9px; background: var(--surface-2); border: 1px solid var(--border); }
 .seg button { height: 26px; padding: 0 12px; border: 0; border-radius: 7px; background: none; color: var(--text-2); font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; }
 .seg button.active { background: var(--surface-3); color: var(--text); }
+.bm-settings { display: flex; flex-direction: column; gap: 12px; padding: 12px 14px; border-radius: var(--radius-sm); background: var(--surface-2); border: 1px solid var(--border); }
+.bm-slider { display: flex; flex-direction: column; gap: 6px; }
 @media (max-width: 700px) { .providers { grid-template-columns: 1fr; } }
 </style>

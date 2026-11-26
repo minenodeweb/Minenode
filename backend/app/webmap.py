@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import re
 import time
 import zipfile
@@ -225,6 +226,27 @@ def _edit(path: Path, values: dict[str, str], header: str = "") -> bool:
     return True
 
 
+def _bm_res_num(res: float) -> float | int:
+    val = float(res)
+    return int(val) if val.is_integer() else val
+
+
+def bluemap_cpu_count() -> int:
+    return max(1, os.cpu_count() or 1)
+
+
+def bluemap_default_threads() -> int:
+    cpus = bluemap_cpu_count()
+    return max(1, cpus // 2) if cpus >= 4 else 1
+
+
+def bluemap_effective_threads(wm) -> int:
+    raw = getattr(wm, "bluemap_render_threads", None)
+    if raw is None:
+        return bluemap_default_threads()
+    return max(1, min(int(raw), 64))
+
+
 def bluemap_write_config(inst: "ServerInstance", accept: Optional[bool] = None) -> bool:
     """Write BlueMap's configs; returns True when anything changed.
 
@@ -239,11 +261,18 @@ def bluemap_write_config(inst: "ServerInstance", accept: Optional[bool] = None) 
     was_accepted = _accepted(d)
     if accept is None:
         accept = bool(maps) or was_accepted
+    threads = bluemap_effective_threads(wm)
+    res = _bm_res_num(getattr(wm, "bluemap_resolution", 0.5))
+    hires_def = int(getattr(wm, "bluemap_hires_distance", 100))
+    lowres_def = int(getattr(wm, "bluemap_lowres_distance", 1500))
+    hires_max = max(500, hires_def)
+    lowres_max = max(6000, lowres_def)
+    pause_limit = "1" if getattr(wm, "bluemap_pause_on_players", False) else "-1"
     changed = _edit(d / "core.conf", {
         "accept-download": "true" if accept else "false",
-        "render-thread-count": "1",
+        "render-thread-count": str(threads),
     }, header=('# Varden: accept-download is set by the panel when BlueMap is enabled.\n'
-               'data: "bluemap"\nrender-thread-count: 1\nscan-for-mod-resources: true\nmetrics: false\n'))
+               f'data: "bluemap"\nrender-thread-count: {threads}\nscan-for-mod-resources: true\nmetrics: false\n'))
     changed |= _edit(d / "webserver.conf", {
         "enabled": "true", "webroot": f'"{BLUEMAP_WEBROOT}"', "ip": '"127.0.0.1"',
         "port": str(wm.port or 8100), "max-connection-count": "500",
@@ -251,11 +280,14 @@ def bluemap_write_config(inst: "ServerInstance", accept: Optional[bool] = None) 
     changed |= _edit(d / "webapp.conf", {
         "enabled": "true", "webroot": f'"{BLUEMAP_WEBROOT}"',
         "default-to-flat-view": "false" if wm.render_3d else "true",
-        "hires-slider-max": "1000", "hires-slider-default": "500",
-        "lowres-slider-max": "10000", "lowres-slider-default": "4000",
+        "resolution-default": str(res),
+        "hires-slider-min": "0", "hires-slider-max": str(hires_max), "hires-slider-default": str(hires_def),
+        "lowres-slider-min": "500", "lowres-slider-max": str(lowres_max), "lowres-slider-default": str(lowres_def),
     }, header="update-settings-file: true\nuse-cookies: true\n")
-    changed |= _edit(d / "plugin.conf", {"live-player-markers": "true" if wm.show_players else "false"},
-                     header='hidden-game-modes: [\n  "spectator"\n]\nhide-vanished: true\nhide-invisible: true\nplayer-render-limit: -1\n')
+    changed |= _edit(d / "plugin.conf", {
+        "live-player-markers": "true" if wm.show_players else "false",
+        "player-render-limit": pause_limit,
+    }, header='hidden-game-modes: [\n  "spectator"\n]\nhide-vanished: true\nhide-invisible: true\n')
     three = "true" if wm.render_3d else "false"
     needs_rerender = False
     for m in maps:
@@ -294,12 +326,18 @@ def _sync_bluemap_web_settings(inst: "ServerInstance") -> None:
         return
     if not isinstance(data, dict):
         return
+    wm = inst.cfg.webmap
+    hires_def = int(getattr(wm, "bluemap_hires_distance", 100))
+    lowres_def = int(getattr(wm, "bluemap_lowres_distance", 1500))
     updated = dict(data)
-    updated["defaultToFlatView"] = not inst.cfg.webmap.render_3d
-    updated["hiresSliderMax"] = max(int(updated.get("hiresSliderMax") or 0), 1000)
-    updated["hiresSliderDefault"] = 500
-    updated["lowresSliderMax"] = max(int(updated.get("lowresSliderMax") or 0), 10000)
-    updated["lowresSliderDefault"] = 4000
+    updated["defaultToFlatView"] = not wm.render_3d
+    updated["resolutionDefault"] = _bm_res_num(getattr(wm, "bluemap_resolution", 0.5))
+    updated["hiresSliderMin"] = 0
+    updated["hiresSliderMax"] = max(500, hires_def)
+    updated["hiresSliderDefault"] = hires_def
+    updated["lowresSliderMin"] = 500
+    updated["lowresSliderMax"] = max(6000, lowres_def)
+    updated["lowresSliderDefault"] = lowres_def
     if updated == data:
         return
     try:
@@ -519,6 +557,12 @@ async def state(inst: "ServerInstance", refresh: bool = False) -> dict:
     return {
         "enabled": wm.enabled, "provider": wm.provider, "show_players": wm.show_players, "render_3d": wm.render_3d,
         "always_on": wm.always_on,
+        "bluemap_resolution": _bm_res_num(getattr(wm, "bluemap_resolution", 0.5)),
+        "bluemap_hires_distance": int(getattr(wm, "bluemap_hires_distance", 100)),
+        "bluemap_lowres_distance": int(getattr(wm, "bluemap_lowres_distance", 1500)),
+        "bluemap_render_threads": bluemap_effective_threads(wm),
+        "bluemap_pause_on_players": bool(getattr(wm, "bluemap_pause_on_players", False)),
+        "cpu_count": bluemap_cpu_count(),
         "providers": providers, "current": current, "engine": inst.cfg.type, "mc_version": inst.cfg.mc_version,
         "map_available": map_available(inst), "map_url": map_url(inst), "public_url": squaremap.public_url(inst),
         "data_dir": squaremap.rel_to_server(inst, data_dir(inst)), "running": bool(inst.running),
